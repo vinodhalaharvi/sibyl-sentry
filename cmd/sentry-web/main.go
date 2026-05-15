@@ -70,6 +70,7 @@ func main() {
 	defaultTarget := flag.String("default-target", "../sibyl-sentry-fixtures", "Default scan target (fixtures repo)")
 	llmBackend := flag.String("llm", "scripted", "LLM backend for Researcher/Critic: scripted | anthropic | claude-code")
 	llmModel := flag.String("model", "", "LLM model name (empty = backend's default)")
+	maxCands := flag.Int("max-candidates", 5, "Max candidates per scanner sent to convergence (0 = unlimited; bound LLM fan-out)")
 	flag.Parse()
 
 	// 1. Broker registered globally so all in-process activities emit
@@ -102,6 +103,11 @@ func main() {
 		log.Fatalf("llm backend: %v", err)
 	}
 	log.Printf("llm backend: %s (model=%q)", *llmBackend, *llmModel)
+	if *maxCands > 0 {
+		log.Printf("max candidates per scanner: %d", *maxCands)
+	} else {
+		log.Printf("max candidates per scanner: unlimited")
+	}
 	sibylproxy.RegisterEngine(w, complete)
 
 	// Sentry workflow + activities.
@@ -128,6 +134,7 @@ func main() {
 		broker:        broker,
 		taskQueue:     *taskQueue,
 		defaultTarget: *defaultTarget,
+		maxCands:      *maxCands,
 	}
 
 	mux := http.NewServeMux()
@@ -180,6 +187,7 @@ type server struct {
 	broker        *sibylproxy.MemoryBroker
 	taskQueue     string
 	defaultTarget string
+	maxCands      int
 }
 
 // --- Handlers ---
@@ -273,8 +281,9 @@ func (s *server) handleRun(w http.ResponseWriter, r *http.Request) {
 			GitHubBaseURL: req.GitHubURL,
 			GitHubToken:   req.GitHubToken,
 		},
-		FileTickets:       req.FileTickets,
-		MinTicketSeverity: parseSeverity(req.MinTicketSeverity),
+		FileTickets:             req.FileTickets,
+		MinTicketSeverity:       parseSeverity(req.MinTicketSeverity),
+		MaxCandidatesPerScanner: s.maxCands,
 	}
 
 	_, err := s.tc.ExecuteWorkflow(r.Context(),

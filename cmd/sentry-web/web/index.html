@@ -71,8 +71,8 @@
   }
 
   main { overflow: hidden; position: relative; }
-  .panel { position: absolute; inset: 0; display: none; }
-  .panel.active { display: block; }
+  .panel { position: absolute; inset: 0; visibility: hidden; pointer-events: none; opacity: 0; }
+  .panel.active { visibility: visible; pointer-events: auto; opacity: 1; }
 
   .panel-list { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
   .scanners { border-right: 1px solid var(--line); padding: 16px 18px; overflow-y: auto; }

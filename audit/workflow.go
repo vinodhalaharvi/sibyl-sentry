@@ -79,6 +79,13 @@ type AuditInput struct {
 	// debugging the data path or for environments without LLM access.
 	// Default: false (always converge).
 	SkipConvergence bool
+
+	// MaxCandidatesPerScanner caps how many candidates from each scanner
+	// are passed to convergence. 0 means unlimited. Set to a small number
+	// (e.g. 5) to bound LLM fan-out for demos / rate-limited environments.
+	// Scanners typically return candidates in priority/severity order, so
+	// the cap keeps the most important findings.
+	MaxCandidatesPerScanner int
 }
 
 // VendorEndpoints groups per-vendor connection config.
@@ -247,25 +254,32 @@ func runScanners(ctx workflow.Context, in AuditInput) ([]findings.Finding, []str
 
 	var candidates []findings.Finding
 	var errs []string
+	cap := in.MaxCandidatesPerScanner
+	clip := func(fs []findings.Finding) []findings.Finding {
+		if cap > 0 && len(fs) > cap {
+			return fs[:cap]
+		}
+		return fs
+	}
 	for _, k := range fans {
 		var err error
 		switch k.id {
 		case ScannerSecrets:
 			var out regex.ScanOutput
 			err = k.future.Get(ctx, &out)
-			candidates = append(candidates, out.Findings...)
+			candidates = append(candidates, clip(out.Findings)...)
 		case ScannerOAuth:
 			var out oauth.ScanOutput
 			err = k.future.Get(ctx, &out)
-			candidates = append(candidates, out.Findings...)
+			candidates = append(candidates, clip(out.Findings)...)
 		case ScannerScopes:
 			var out scopes.ScanOutput
 			err = k.future.Get(ctx, &out)
-			candidates = append(candidates, out.Findings...)
+			candidates = append(candidates, clip(out.Findings)...)
 		case ScannerDormancy:
 			var out dormancy.ScanOutput
 			err = k.future.Get(ctx, &out)
-			candidates = append(candidates, out.Findings...)
+			candidates = append(candidates, clip(out.Findings)...)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", k.id, err))
