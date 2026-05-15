@@ -19,6 +19,13 @@ type CompleteFunc = agent.CompleteFunc
 // Question and Answer alias Sibyl's input/output types.
 type Question = agent.Question
 type Answer = agent.Answer
+type Round = agent.Round
+type Verdict = agent.Verdict
+
+// ConvergeWorkflowName matches Sibyl's registered name so the audit
+// workflow can ExecuteChildWorkflow against this string identically in
+// both stub and real builds.
+const ConvergeWorkflowName = "ConvergeWorkflow"
 
 // RegisterEngine wires Sibyl's workflows onto a Temporal worker.
 func RegisterEngine(w worker.Worker, complete CompleteFunc) {

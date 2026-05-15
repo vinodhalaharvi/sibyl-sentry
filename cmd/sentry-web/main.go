@@ -122,6 +122,7 @@ func main() {
 	mux.HandleFunc("/", srv.handleIndex)
 	mux.HandleFunc("/run", srv.handleRun)
 	mux.HandleFunc("/events", srv.handleEvents)
+	mux.HandleFunc("/report", srv.handleReport)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -283,6 +284,26 @@ func (s *server) handleRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(runResponse{WorkflowID: wfID})
 	log.Printf("run started: %s target=%s", wfID, req.TargetPath)
+}
+
+// handleReport fetches the final report for a completed workflow.
+// The UI calls this on workflow.completed to render the finding list
+// with LLM rationale and deep links to each Converge child workflow.
+func (s *server) handleReport(w http.ResponseWriter, r *http.Request) {
+	workflowID := r.URL.Query().Get("workflow_id")
+	if workflowID == "" {
+		http.Error(w, "workflow_id required", http.StatusBadRequest)
+		return
+	}
+
+	run := s.tc.GetWorkflow(r.Context(), workflowID, "")
+	var out audit.AuditOutput
+	if err := run.Get(r.Context(), &out); err != nil {
+		http.Error(w, "fetch result: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // handleEvents implements SSE for /events?workflow_id=X. Subscribes to

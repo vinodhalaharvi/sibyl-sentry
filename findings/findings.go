@@ -100,6 +100,41 @@ type Finding struct {
 
 	// ScannerID identifies which scanner produced this (for debugging).
 	ScannerID string `json:"scanner_id"`
+
+	// --- LLM-converged fields, populated after Researcher/Critic runs ---
+
+	// LLMRationale is the Researcher's justification for accepting this
+	// finding, as approved by the Critic. Empty if the finding bypassed
+	// the convergence loop (shouldn't happen in production paths).
+	LLMRationale string `json:"llm_rationale,omitempty"`
+
+	// ConvergedAt is when the ConvergeWorkflow approved this finding.
+	// Zero value means convergence didn't run (legacy/scanner-only).
+	ConvergedAt time.Time `json:"converged_at,omitempty"`
+
+	// ConvergeRounds is how many Researcher/Critic iterations this
+	// finding required before approval. 0 means convergence didn't run.
+	ConvergeRounds int `json:"converge_rounds,omitempty"`
+
+	// ConvergeWorkflowID is the Temporal workflow ID for the
+	// ConvergeWorkflow that approved this finding. The web UI uses this
+	// to deep-link to the Temporal Web UI's workflow detail page.
+	ConvergeWorkflowID string `json:"converge_workflow_id,omitempty"`
+}
+
+// RejectedFinding records a candidate that the Critic refused to accept.
+// Keeping these in the report serves two purposes:
+//
+//   1. The audit team can see what the agent considered and rejected —
+//      transparency about false-positive filtering.
+//   2. If the rejection was wrong (rare but possible), the rejected list
+//      surfaces it for human review rather than swallowing it silently.
+type RejectedFinding struct {
+	Candidate          Finding   `json:"candidate"`
+	Reason             string    `json:"reason"`
+	RejectedAt         time.Time `json:"rejected_at"`
+	ConvergeRounds     int       `json:"converge_rounds"`
+	ConvergeWorkflowID string    `json:"converge_workflow_id,omitempty"`
 }
 
 // Report is the synthesized output of an audit — multiple findings across
@@ -108,6 +143,15 @@ type Report struct {
 	Target      string    `json:"target"`
 	StartedAt   time.Time `json:"started_at"`
 	CompletedAt time.Time `json:"completed_at"`
-	Findings    []Finding `json:"findings"`
-	Errors      []string  `json:"errors,omitempty"`
+
+	// Findings are the candidates accepted by the Researcher/Critic loop.
+	Findings []Finding `json:"findings"`
+
+	// Rejected are the candidates the Critic refused to publish. Kept
+	// for transparency — the audit team can see what the agent dismissed
+	// and why.
+	Rejected []RejectedFinding `json:"rejected,omitempty"`
+
+	// Errors are scanner-level errors (e.g. a vendor API was unreachable).
+	Errors []string `json:"errors,omitempty"`
 }

@@ -183,6 +183,44 @@
   }
   .f-meta b { color: var(--ink-dim); }
 
+  /* LLM rationale block — the agentic part of the demo */
+  .f-rationale {
+    font-size: 11px; color: var(--ink-dim);
+    padding: 10px 12px; margin-bottom: 8px;
+    background: var(--bg);
+    border-left: 2px solid var(--sibyl);
+    line-height: 1.6;
+  }
+  .f-rationale.rejected {
+    border-left-color: var(--ink-faint);
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+  .rationale-label {
+    color: var(--sibyl); font-weight: 700;
+    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    margin-right: 6px;
+  }
+  .finding.rejected {
+    opacity: 0.65;
+    border-left-color: var(--ink-faint);
+  }
+  .finding.rejected .f-title {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-faint);
+  }
+
+  /* Deep link to Temporal Web UI */
+  .tmp-link {
+    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--running);
+    border: 1px solid var(--running);
+    padding: 3px 8px;
+    text-decoration: none;
+    font-weight: 700;
+  }
+  .tmp-link:hover { background: var(--running); color: var(--bg); }
+
   /* Empty/initial state */
   .empty {
     flex: 1; display: flex; align-items: center; justify-content: center;
@@ -349,23 +387,78 @@
     $('evCount').textContent = evCount;
   }
 
-  function renderFinding(f) {
+  async function fetchAndRenderReport(workflowID) {
+    try {
+      const resp = await fetch('/report?workflow_id=' + encodeURIComponent(workflowID));
+      if (!resp.ok) {
+        addEvent('error', 'fetch report failed: ' + resp.statusText);
+        return;
+      }
+      const out = await resp.json();
+      const findings = out.Report?.Findings || [];
+      const rejected = out.Report?.Rejected || [];
+      renderFindings(findings, rejected);
+    } catch (e) {
+      addEvent('error', 'fetch report: ' + e);
+    }
+  }
+
+  function renderFindings(accepted, rejected) {
+    const list = $('fList');
+    list.innerHTML = '';
+    $('fCount').textContent = String(accepted.length);
+    if (accepted.length === 0 && rejected.length === 0) {
+      list.innerHTML = '<div class="empty">No findings.</div>';
+      return;
+    }
+    for (const f of accepted) {
+      list.appendChild(renderFinding(f, false));
+    }
+    if (rejected.length > 0) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint);';
+      sep.textContent = `Rejected by Critic (${rejected.length})`;
+      list.appendChild(sep);
+      for (const r of rejected) {
+        list.appendChild(renderFinding(r.Candidate || r, true, r.Reason, r.ConvergeWorkflowID));
+      }
+    }
+  }
+
+  function renderFinding(f, isRejected, rejectionReason, rejectedConvergeID) {
     const sev = f.Severity || 'INFO';
     const card = document.createElement('div');
-    card.className = `finding severity-${sev}`;
+    card.className = `finding severity-${sev}` + (isRejected ? ' rejected' : '');
+    const convergeID = isRejected
+      ? (rejectedConvergeID || f.ConvergeWorkflowID || '')
+      : (f.ConvergeWorkflowID || '');
+    const temporalLink = convergeID
+      ? `<a class="tmp-link" href="http://localhost:8080/namespaces/default/workflows/${encodeURIComponent(convergeID)}" target="_blank">TMP →</a>`
+      : '';
+    const rationale = isRejected
+      ? `<div class="f-rationale rejected">${escapeHTML(rejectionReason || '')}</div>`
+      : (f.LLMRationale
+          ? `<div class="f-rationale"><span class="rationale-label">Critic rationale:</span> ${escapeHTML(f.LLMRationale)}</div>`
+          : '');
     const evidence = (f.Evidence || []).slice(0, 2).map(e =>
       `<span><b>${e.Kind || ''}</b> @ ${e.Location || ''}</span>`
     ).join('');
+    const rounds = f.ConvergeRounds ? ` · ${f.ConvergeRounds} round${f.ConvergeRounds>1?'s':''}` : '';
     card.innerHTML = `
       <div class="f-head">
         <div class="f-title">${escapeHTML(f.Title || '(no title)')}</div>
-        <div class="f-sev ${sev}">${sev}</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          ${temporalLink}
+          <div class="f-sev ${sev}">${isRejected ? 'REJECTED' : sev}</div>
+        </div>
       </div>
       <div class="f-desc">${escapeHTML(f.Description || '')}</div>
+      ${rationale}
       <div class="f-meta">
         <span><b>scanner:</b> ${f.ScannerID || '?'}</span>
         <span><b>category:</b> ${f.Category || '?'}</span>
         ${evidence}
+        <span><b>converge:</b> ${convergeID ? convergeID.slice(0,30)+'...' : '—'}${rounds}</span>
       </div>`;
     return card;
   }
@@ -397,6 +490,7 @@
         setWorkflowState('completed', ev.workflow_id);
         addEvent('workflow.completed',
           `audit complete in <b>${(ev.duration_ms/1000).toFixed(1)}s</b> — ${ev.output?.findings_count ?? 0} findings`);
+        fetchAndRenderReport(ev.workflow_id);
         break;
       case 'workflow.failed':
         setWorkflowState('failed', ev.workflow_id);

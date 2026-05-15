@@ -25,6 +25,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
 
 // CompleteFunc is Sibyl's LLM seam: given a system prompt and a user
@@ -39,15 +40,60 @@ type Question struct {
 
 // Answer is Sibyl's ConvergeWorkflow output.
 type Answer struct {
-	Text     string
-	Accepted bool
-	Rounds   int
+	Text      string
+	Rounds    int
+	Converged bool
+	History   []Round
+}
+
+// Round captures one iteration of the convergence loop.
+type Round struct {
+	Number   int
+	Research string
+	Verdict  Verdict
+}
+
+// Verdict is the Critic's structured judgment of a candidate answer.
+type Verdict struct {
+	Approved   bool
+	Confidence float64
+	Feedback   string
+}
+
+// ConvergeWorkflowName is the registered workflow name used by callers
+// (matches Sibyl's real name so the audit workflow can use the same
+// string for both stub and real builds).
+const ConvergeWorkflowName = "ConvergeWorkflow"
+
+// ConvergeWorkflow is a stub-mode implementation that always returns
+// "ACCEPTED" so the audit pipeline runs end-to-end without a real LLM.
+//
+// In real builds, the corresponding entry is agent.ConvergeWorkflow,
+// which performs the actual Researcher/Critic loop with Claude.
+//
+// The stub returns a single-round Answer whose Text is a canned ACCEPTED
+// response — useful for CI tests and for running the audit pipeline
+// locally without an API key. The audit workflow's parser treats this
+// text as if the LLM produced it.
+func ConvergeWorkflow(ctx workflow.Context, q Question) (Answer, error) {
+	canned := "DECISION: ACCEPTED\nSEVERITY: HIGH\nRATIONALE: Stub mode — no real LLM call. Evidence accepted as-is.\nREVISED_DESCRIPTION: (stub) original description retained."
+	return Answer{
+		Text:      canned,
+		Rounds:    1,
+		Converged: true,
+		History: []Round{
+			{Number: 1, Research: canned, Verdict: Verdict{Approved: true, Confidence: 1.0}},
+		},
+	}, nil
 }
 
 // RegisterEngine wires Sibyl's Researcher/Critic workflows and activities
-// onto a Temporal worker. Stub: registers nothing (no Sibyl in scope).
+// onto a Temporal worker. Stub: registers a canned ConvergeWorkflow so
+// the audit pipeline can call it end-to-end without a real LLM.
 func RegisterEngine(w worker.Worker, complete CompleteFunc) {
-	_ = w
+	w.RegisterWorkflowWithOptions(ConvergeWorkflow, workflow.RegisterOptions{
+		Name: ConvergeWorkflowName,
+	})
 	_ = complete
 }
 
