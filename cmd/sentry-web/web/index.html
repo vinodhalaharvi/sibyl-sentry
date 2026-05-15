@@ -7,6 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
 <style>
   :root {
     --bg: #0a0a0b; --bg-1: #121214; --bg-2: #1a1a1d;
@@ -19,580 +24,820 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: var(--bg); color: var(--ink);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 13px; line-height: 1.5; height: 100%; }
+    font-size: 13px; line-height: 1.5; height: 100%; overflow: hidden; }
   body {
     background:
       radial-gradient(ellipse at 5% 0%, rgba(244,240,40,0.04), transparent 50%),
       radial-gradient(ellipse at 95% 100%, rgba(255,106,61,0.06), transparent 50%),
       var(--bg);
   }
-
+  #root { height: 100vh; }
   .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
-
-  /* --- Top bar --- */
-  header {
-    border-bottom: 1px solid var(--line);
-    display: grid; grid-template-columns: 1fr auto; align-items: center;
-    padding: 0 22px;
-  }
-  .brand {
-    display: flex; align-items: baseline; gap: 12px;
-  }
-  .brand-mark {
-    font-family: 'Instrument Serif', serif; font-style: italic;
-    color: var(--accent); font-size: 22px; letter-spacing: -0.5px;
-  }
-  .brand-sub {
-    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-  .top-actions { display: flex; gap: 10px; }
-  .btn {
-    background: var(--bg-1); color: var(--ink);
-    border: 1px solid var(--line-strong);
-    padding: 7px 14px; font-family: inherit; font-size: 11px;
-    letter-spacing: 0.05em; text-transform: uppercase;
-    cursor: pointer;
-  }
+  header { border-bottom: 1px solid var(--line); display: grid;
+    grid-template-columns: auto 1fr auto; align-items: center; padding: 0 22px; gap: 30px; }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand-mark { font-family: 'Instrument Serif', serif; font-style: italic;
+    color: var(--accent); font-size: 22px; letter-spacing: -0.5px; }
+  .brand-sub { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); }
+  .tabs { display: flex; gap: 0; }
+  .tab { padding: 8px 18px; font-family: inherit; font-size: 11px;
+    letter-spacing: 0.1em; text-transform: uppercase; background: transparent;
+    border: none; color: var(--ink-dim); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .badge { margin-left: 6px; padding: 1px 6px; background: var(--bg-1);
+    border: 1px solid var(--line); color: var(--ink-faint); font-size: 9px; }
+  .tab.active .badge { color: var(--accent); border-color: var(--accent); }
+  .top-actions { display: flex; gap: 10px; align-items: center; }
+  .btn { background: var(--bg-1); color: var(--ink);
+    border: 1px solid var(--line-strong); padding: 7px 14px;
+    font-family: inherit; font-size: 11px; letter-spacing: 0.05em;
+    text-transform: uppercase; cursor: pointer; }
   .btn:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-primary {
-    background: var(--accent); color: #0a0a0b; border-color: var(--accent);
-    font-weight: 700;
-  }
+  .btn-primary { background: var(--accent); color: #0a0a0b; border-color: var(--accent); font-weight: 700; }
   .btn-primary:hover { background: var(--ink); border-color: var(--ink); }
-  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-  .btn a { color: inherit; text-decoration: none; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* --- Main grid --- */
-  main {
-    display: grid; grid-template-columns: 360px 1fr;
-    overflow: hidden;
+  .phase-pill { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--ink-faint); padding: 4px 10px; border: 1px solid var(--line);
+    display: flex; align-items: center; gap: 6px; }
+  .phase-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); }
+  .phase-pill.live { color: var(--ok); border-color: var(--ok); }
+  .phase-pill.live .dot { background: var(--ok); animation: phasePulse 1.6s ease-out infinite; }
+  @keyframes phasePulse {
+    0% { box-shadow: 0 0 0 0 rgba(110,255,138,0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(110,255,138,0); }
+    100% { box-shadow: 0 0 0 0 rgba(110,255,138,0); }
   }
 
-  /* --- Left: scanner status panel --- */
-  .scanners {
-    border-right: 1px solid var(--line);
-    padding: 16px 18px; overflow-y: auto;
-  }
-  .panel-title {
-    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ink-faint); margin-bottom: 14px;
-  }
-  .scanner-card {
-    border: 1px solid var(--line); margin-bottom: 12px;
-    background: var(--bg-1);
-    transition: border-color 0.2s;
-  }
+  main { overflow: hidden; position: relative; }
+  .panel { position: absolute; inset: 0; display: none; }
+  .panel.active { display: block; }
+
+  .panel-list { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+  .scanners { border-right: 1px solid var(--line); padding: 16px 18px; overflow-y: auto; }
+  .side-title { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 14px; }
+  .scanner-card { border: 1px solid var(--line); margin-bottom: 12px;
+    background: var(--bg-1); transition: border-color 0.3s ease; }
   .scanner-card.running { border-color: var(--sibyl); }
   .scanner-card.completed { border-color: var(--ok); }
   .scanner-card.failed { border-color: var(--crit); }
-
-  .scanner-head {
-    padding: 9px 12px;
-    display: grid; grid-template-columns: 1fr auto; align-items: center;
-    border-bottom: 1px solid var(--line);
-  }
+  .scanner-head { padding: 9px 12px; display: grid; grid-template-columns: 1fr auto;
+    align-items: center; border-bottom: 1px solid var(--line); }
   .scanner-name { font-size: 12px; font-weight: 500; }
-  .scanner-status {
-    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
-    color: var(--ink-faint);
-  }
+  .scanner-status { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-faint); }
   .scanner-card.running .scanner-status { color: var(--sibyl); }
   .scanner-card.completed .scanner-status { color: var(--ok); }
-  .scanner-card.failed .scanner-status { color: var(--crit); }
-
   .scanner-body { padding: 8px 12px 10px; font-size: 11px; color: var(--ink-dim); }
   .scanner-body .pair { display: flex; justify-content: space-between; }
   .scanner-body .pair b { color: var(--ink); }
 
-  /* --- Right: event stream + findings --- */
-  .stream { display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; }
-
-  .events {
-    border-bottom: 1px solid var(--line);
-    overflow: hidden;
-    display: flex; flex-direction: column;
-  }
-  .findings {
-    overflow: hidden;
-    display: flex; flex-direction: column;
-  }
-
-  .section-head {
-    padding: 10px 18px; border-bottom: 1px solid var(--line);
-    display: flex; justify-content: space-between; align-items: baseline;
-    background: var(--bg-1);
-  }
-  .section-title {
-    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-  .section-count {
-    font-family: 'Instrument Serif', serif; font-style: italic;
-    font-size: 18px; color: var(--accent);
-  }
-
+  .stream { display: grid; grid-template-rows: auto 1fr 1fr; overflow: hidden; }
+  .events { border-bottom: 1px solid var(--line); overflow: hidden; display: flex; flex-direction: column; }
+  .findings { overflow: hidden; display: flex; flex-direction: column; }
+  .section-head { padding: 10px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline; background: var(--bg-1); }
+  .section-title { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); }
+  .section-count { font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 18px; color: var(--accent); }
   .scroll { overflow-y: auto; padding: 8px 18px 16px; flex: 1; }
 
-  /* Event rows */
-  .ev {
-    font-size: 11px; padding: 4px 0; display: grid;
-    grid-template-columns: 70px 110px 1fr; gap: 10px; align-items: baseline;
-    border-bottom: 1px solid transparent;
+  .ev { font-size: 11px; padding: 4px 0; display: grid;
+    grid-template-columns: 70px 130px 1fr; gap: 10px; align-items: baseline;
+    animation: eventEnter 0.35s ease-out; opacity: 0; animation-fill-mode: forwards; }
+  @keyframes eventEnter {
+    0% { opacity: 0; transform: translateX(8px); }
+    100% { opacity: 1; transform: translateX(0); }
   }
   .ev-ts { color: var(--ink-faint); font-size: 10px; }
-  .ev-kind {
-    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
-    padding: 2px 6px; align-self: center;
-    border: 1px solid var(--line-strong);
-  }
-  .ev-kind.node\.started   { color: var(--sibyl);   border-color: var(--sibyl);   }
-  .ev-kind.node\.completed { color: var(--ok);      border-color: var(--ok);      }
-  .ev-kind.node\.failed    { color: var(--crit);    border-color: var(--crit);    }
-  .ev-kind.workflow\.started   { color: var(--running); border-color: var(--running); }
-  .ev-kind.workflow\.completed { color: var(--ok);      border-color: var(--ok);      }
-  .ev-kind.workflow\.failed    { color: var(--crit);    border-color: var(--crit);    }
+  .ev-kind { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 2px 6px; align-self: center; border: 1px solid var(--line-strong); text-align: center; }
+  .ev-kind.node-started   { color: var(--sibyl);   border-color: var(--sibyl);   }
+  .ev-kind.node-completed { color: var(--ok);      border-color: var(--ok);      }
+  .ev-kind.node-failed    { color: var(--ink-dim); border-color: var(--ink-dim); }
+  .ev-kind.workflow-started   { color: var(--running); border-color: var(--running); }
+  .ev-kind.workflow-completed { color: var(--ok);      border-color: var(--ok);      }
+  .ev-kind.workflow-failed    { color: var(--crit);    border-color: var(--crit);    }
   .ev-msg { color: var(--ink-dim); }
   .ev-msg b { color: var(--ink); font-weight: 500; }
+  .ev-msg .mono { font-family: inherit; color: var(--sibyl); }
 
-  /* Finding cards */
-  .finding {
-    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  .finding { border: 1px solid var(--line); border-left: 3px solid var(--accent);
     background: var(--bg-1); margin-bottom: 10px; padding: 12px 14px;
+    animation: cardEnter 0.45s ease-out; opacity: 0; animation-fill-mode: forwards; }
+  @keyframes cardEnter {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
   }
   .finding.severity-CRITICAL { border-left-color: var(--crit); }
   .finding.severity-HIGH     { border-left-color: var(--accent); }
   .finding.severity-MEDIUM   { border-left-color: var(--warn); }
-  .finding.severity-LOW      { border-left-color: var(--ink-dim); }
-
-  .f-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .f-title { font-size: 12px; color: var(--ink); font-weight: 500; }
-  .f-sev   {
-    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
-    color: var(--accent); font-weight: 700;
-  }
+  .f-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap: 10px; }
+  .f-title { font-size: 12px; color: var(--ink); font-weight: 500; flex: 1; }
+  .f-head-right { display: flex; gap: 10px; align-items: center; }
+  .f-sev { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; }
   .f-sev.CRITICAL { color: var(--crit); }
   .f-sev.HIGH     { color: var(--accent); }
   .f-sev.MEDIUM   { color: var(--warn); }
-  .f-sev.LOW      { color: var(--ink-dim); }
-
   .f-desc { font-size: 11px; color: var(--ink-dim); margin-bottom: 8px; line-height: 1.6; }
-  .f-meta {
-    font-size: 10px; color: var(--ink-faint);
-    display: flex; gap: 14px; flex-wrap: wrap;
-  }
-  .f-meta b { color: var(--ink-dim); }
-
-  /* LLM rationale block — the agentic part of the demo */
-  .f-rationale {
-    font-size: 11px; color: var(--ink-dim);
+  .f-rationale { font-size: 11px; color: var(--ink-dim);
     padding: 10px 12px; margin-bottom: 8px;
-    background: var(--bg);
-    border-left: 2px solid var(--sibyl);
-    line-height: 1.6;
-  }
-  .f-rationale.rejected {
-    border-left-color: var(--ink-faint);
-    color: var(--ink-faint);
-    font-style: italic;
-  }
-  .rationale-label {
-    color: var(--sibyl); font-weight: 700;
-    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
-    margin-right: 6px;
-  }
-  .finding.rejected {
-    opacity: 0.65;
-    border-left-color: var(--ink-faint);
-  }
-  .finding.rejected .f-title {
-    text-decoration: line-through;
-    text-decoration-color: var(--ink-faint);
-  }
-
-  /* Deep link to Temporal Web UI */
-  .tmp-link {
-    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
-    color: var(--running);
-    border: 1px solid var(--running);
-    padding: 3px 8px;
-    text-decoration: none;
-    font-weight: 700;
-  }
+    background: var(--bg); border-left: 2px solid var(--sibyl);
+    line-height: 1.6; }
+  .f-rationale.rejected { border-left-color: var(--ink-faint); color: var(--ink-faint); font-style: italic; }
+  .rationale-label { color: var(--sibyl); font-weight: 700; font-size: 9px;
+    letter-spacing: 0.15em; text-transform: uppercase; margin-right: 6px; }
+  .finding.rejected { opacity: 0.65; border-left-color: var(--ink-faint); }
+  .finding.rejected .f-title { text-decoration: line-through; text-decoration-color: var(--ink-faint); }
+  .tmp-link { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--running); border: 1px solid var(--running);
+    padding: 3px 8px; text-decoration: none; font-weight: 700; cursor: pointer; }
   .tmp-link:hover { background: var(--running); color: var(--bg); }
+  .f-meta { font-size: 10px; color: var(--ink-faint); display: flex; gap: 14px; flex-wrap: wrap; }
+  .f-meta b { color: var(--ink-dim); }
+  .rejected-divider { margin: 16px 0 8px; padding-top: 12px;
+    border-top: 1px solid var(--line); font-size: 10px;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); }
 
-  /* Empty/initial state */
-  .empty {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    color: var(--ink-faint); font-style: italic; font-size: 12px;
-    font-family: 'Instrument Serif', serif;
-  }
-
-  /* Workflow header */
-  .wf-banner {
-    margin: 12px 18px 0; padding: 12px 16px;
+  .wf-banner { margin: 12px 18px 0; padding: 12px 16px;
     background: var(--bg-1); border: 1px solid var(--line-strong);
-    display: grid; grid-template-columns: auto 1fr auto; gap: 18px;
-    align-items: center;
-  }
-  .wf-banner.idle { display: none; }
-  .wf-id {
-    font-size: 11px; color: var(--ink); letter-spacing: 0.02em;
-  }
-  .wf-id .label {
-    color: var(--ink-faint); font-size: 9px; letter-spacing: 0.15em;
-    text-transform: uppercase; margin-right: 8px;
-  }
-  .wf-status {
-    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
-  }
-  .wf-status.running { color: var(--sibyl); }
+    display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; }
+  .wf-id { font-size: 11px; color: var(--ink); }
+  .wf-id .label { color: var(--ink-faint); font-size: 9px; letter-spacing: 0.15em;
+    text-transform: uppercase; margin-right: 8px; }
+  .wf-id a { color: var(--running); text-decoration: none;
+    border-bottom: 1px dotted var(--running); cursor: pointer; }
+  .wf-id a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+  .wf-status { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .wf-status.idle { color: var(--ink-faint); }
+  .wf-status.running { color: var(--running); }
   .wf-status.completed { color: var(--ok); }
   .wf-status.failed { color: var(--crit); }
-  .wf-pulse {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--ink-faint);
-  }
-  .wf-pulse.running { background: var(--sibyl); animation: pulse 1.4s ease-in-out infinite; }
+  .wf-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+  .wf-pulse.running { background: var(--running); animation: phasePulse 1.6s ease-out infinite; }
   .wf-pulse.completed { background: var(--ok); }
-  .wf-pulse.failed { background: var(--crit); }
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
+
+  .panel-dag { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+  .dag-toolbar { padding: 12px 22px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center; background: var(--bg-1); }
+  .dag-summary { display: flex; gap: 24px; font-size: 11px; color: var(--ink-dim); }
+  .dag-summary .stat b { color: var(--ink); }
+  .dag-summary .stat .v { color: var(--accent);
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 18px; margin-right: 4px; }
+  .dag-summary .stat .v.crit { color: var(--crit); }
+  .dag-legend { display: flex; gap: 14px; font-size: 10px; color: var(--ink-faint); }
+  .dag-legend .swatch { display: inline-flex; align-items: center; gap: 5px; }
+  .dag-legend .dot { width: 8px; height: 8px; border-radius: 1px; display: inline-block; }
+  .dag-legend .dot.idle { background: var(--line-strong); }
+  .dag-legend .dot.running { background: var(--sibyl); animation: legendPulse 1.2s ease-out infinite; }
+  .dag-legend .dot.completed { background: var(--ok); }
+  .dag-legend .dot.rejected { background: var(--ink-faint); }
+  @keyframes legendPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
   }
+
+  .dag-canvas { position: relative; overflow: auto;
+    background:
+      linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 40px 40px; }
+  .dag-canvas svg { display: block; width: 100%; min-width: 1180px; }
+
+  .node-g { cursor: pointer; transition: opacity 0.3s ease; }
+  .node-g.idle    { opacity: 0.55; }
+  .node-g.running { opacity: 1; }
+  .node-g.completed, .node-g.accepted { opacity: 1; }
+  .node-g.rejected, .node-g.failed { opacity: 0.7; }
+  .node-g rect { transition: stroke 0.25s ease, fill 0.25s ease; stroke-width: 1.5; }
+  .node-g:hover rect { filter: brightness(1.4); }
+  .node-g.idle rect    { fill: var(--bg-1); stroke: var(--line-strong); }
+  .node-g.running rect { fill: var(--bg-1); stroke: var(--sibyl); }
+  .node-g.completed rect { fill: var(--bg-1); stroke: var(--ok); }
+  .node-g.accepted rect  { fill: rgba(110,255,138,0.05); stroke: var(--ok); }
+  .node-g.rejected rect, .node-g.failed rect {
+    fill: rgba(85,85,78,0.05); stroke: var(--ink-faint);
+  }
+  .node-g.root rect { fill: var(--bg-1); stroke: var(--accent); }
+  .node-g.root.running rect { stroke: var(--accent); }
+
+  .node-pulse { fill: none; stroke: var(--sibyl); stroke-width: 2; opacity: 0; }
+  .node-g.running .node-pulse { animation: nodePulseRing 1.4s ease-out infinite; }
+  @keyframes nodePulseRing {
+    0%   { stroke-opacity: 0.7; transform: scale(1); transform-box: fill-box; transform-origin: center; }
+    100% { stroke-opacity: 0; transform: scale(1.18); transform-box: fill-box; transform-origin: center; }
+  }
+
+  .node-g .label { fill: var(--ink); font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 500; pointer-events: none; }
+  .node-g.rejected .label, .node-g.failed .label {
+    fill: var(--ink-faint); text-decoration: line-through;
+  }
+  .node-g.root .label { fill: var(--accent); }
+  .node-g .sub { fill: var(--ink-faint); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; pointer-events: none; }
+  .node-g .badge { fill: var(--ink-faint); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+    pointer-events: none; transition: fill 0.25s ease; }
+  .node-g.running .badge { fill: var(--sibyl); }
+  .node-g.completed .badge, .node-g.accepted .badge { fill: var(--ok); }
+  .node-g.rejected .badge, .node-g.failed .badge { fill: var(--ink-faint); }
+  .node-g .sev { font-family: 'JetBrains Mono', monospace;
+    font-size: 8px; font-weight: 700; letter-spacing: 0.1em; pointer-events: none; }
+  .node-g .sev.CRITICAL { fill: var(--crit); }
+  .node-g .sev.HIGH     { fill: var(--accent); }
+  .node-g .sev.MEDIUM   { fill: var(--warn); }
+
+  .edge-base    { stroke: var(--line); stroke-width: 1.5; fill: none; transition: stroke 0.3s ease; }
+  .edge-active  { stroke: var(--sibyl); stroke-width: 2; fill: none; opacity: 0.85;
+                  stroke-dasharray: 4 4; animation: flowdash 0.6s linear infinite; }
+  .edge-done    { stroke: var(--ok); stroke-width: 1.5; fill: none; opacity: 0.5; }
+  .edge-rejected { stroke: var(--ink-faint); stroke-width: 1; fill: none; opacity: 0.4;
+                   stroke-dasharray: 3 3; }
+  @keyframes flowdash { to { stroke-dashoffset: -8; } }
+
+  .phase-label { fill: var(--ink-faint); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    transition: fill 0.3s ease; }
+  .phase-label.active { fill: var(--sibyl); }
+  .phase-label.completed { fill: var(--ok); }
+  .phase-line { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4,4; }
+
+  .empty-state { fill: var(--ink-faint); font-family: 'Instrument Serif', serif;
+    font-style: italic; font-size: 14px; }
 </style>
 </head>
 <body>
 
-<div class="app">
+<div id="root"></div>
 
-  <header>
-    <div class="brand">
-      <span class="brand-mark">Sibyl Sentry</span>
-      <span class="brand-sub">live audit · stub mode</span>
-    </div>
-    <div class="top-actions">
-      <button class="btn" id="reset">Clear</button>
-      <button class="btn btn-primary" id="run">Run Audit</button>
-    </div>
-  </header>
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
 
-  <main>
-    <aside class="scanners">
-      <div class="panel-title">Scanners</div>
-      <div id="scannerList">
-        <!-- populated as NodeStarted events arrive -->
-      </div>
-      <div class="panel-title" style="margin-top: 28px;">Vendor Sources</div>
-      <div class="scanner-card">
-        <div class="scanner-head">
-          <span class="scanner-name">Okta</span>
-          <span class="scanner-status">:9001</span>
-        </div>
-        <div class="scanner-body">Admin API · users · groups · apps · logs</div>
-      </div>
-      <div class="scanner-card">
-        <div class="scanner-head">
-          <span class="scanner-name">AWS IAM</span>
-          <span class="scanner-status">:9002</span>
-        </div>
-        <div class="scanner-body">Users · access keys · roles · policies</div>
-      </div>
-      <div class="scanner-card">
-        <div class="scanner-head">
-          <span class="scanner-name">GitHub</span>
-          <span class="scanner-status">:9003</span>
-        </div>
-        <div class="scanner-body">Members · repos · teams · collaborators</div>
-      </div>
-    </aside>
+const SCANNERS = [
+  { id: 'secrets',  label: 'Secrets',        sub: 'regex + git history' },
+  { id: 'oauth',    label: 'Stale OAuth',    sub: 'okta /apps' },
+  { id: 'scopes',   label: 'Over-Privilege', sub: 'okta /apps/{id}' },
+  { id: 'dormancy', label: 'Dormant SAs',    sub: 'aws /iam/users' },
+];
 
-    <section class="stream">
-      <div class="wf-banner idle" id="wfBanner">
-        <div class="wf-pulse" id="wfPulse"></div>
-        <div class="wf-id"><span class="label">workflow</span><span id="wfId">—</span></div>
-        <div class="wf-status" id="wfStatus">idle</div>
-      </div>
+const TEMPORAL_BASE = 'http://localhost:8080/namespaces/default/workflows/';
 
-      <div class="events">
-        <div class="section-head">
-          <span class="section-title">Live Event Stream</span>
-          <span class="section-count" id="evCount">0</span>
-        </div>
-        <div class="scroll" id="evList">
-          <div class="empty">Click "Run Audit" to start an audit. Scanner events will stream here as they fire.</div>
-        </div>
-      </div>
+function App() {
+  const [tab, setTab] = useState('dag');
+  const [playState, setPlayState] = useState('idle');
+  const [workflowId, setWorkflowId] = useState(null);
+  const [scanner, setScanner] = useState(() =>
+    Object.fromEntries(SCANNERS.map(s => [s.id, 'idle'])));
+  const [scannerOut, setScannerOut] = useState({});
+  const [candidates, setCandidates] = useState({});
+  const [events, setEvents] = useState([]);
+  const [reportFindings, setReportFindings] = useState([]);
+  const [reportRejected, setReportRejected] = useState([]);
+  const esRef = useRef(null);
 
-      <div class="findings">
-        <div class="section-head">
-          <span class="section-title">Findings</span>
-          <span class="section-count" id="fCount">0</span>
-        </div>
-        <div class="scroll" id="fList">
-          <div class="empty">No findings yet.</div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-</div>
-
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-
-  // UI state
-  let evCount = 0;
-  let findings = [];
-  const scanners = new Map(); // node_id → { label, status, durationMs, output }
-  let es = null;
-
-  // Render helpers
-  function renderScanners() {
-    const list = $('scannerList');
-    list.innerHTML = '';
-    if (scanners.size === 0) {
-      list.innerHTML = `<div style="color:var(--ink-faint); font-size:11px; font-style:italic; font-family:'Instrument Serif',serif;">Waiting for first run.</div>`;
-      return;
-    }
-    for (const [nodeID, s] of scanners) {
-      const card = document.createElement('div');
-      card.className = `scanner-card ${s.status}`;
-      const summary = s.output
-        ? Object.entries(s.output).map(([k, v]) => `<div class="pair"><span>${k}</span><b>${v}</b></div>`).join('')
-        : `<div style="color:var(--ink-faint);">running…</div>`;
-      card.innerHTML = `
-        <div class="scanner-head">
-          <span class="scanner-name">${s.label || nodeID}</span>
-          <span class="scanner-status">${s.status}</span>
-        </div>
-        <div class="scanner-body">${summary}</div>`;
-      list.appendChild(card);
-    }
+  function reset() {
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    setPlayState('idle');
+    setWorkflowId(null);
+    setScanner(Object.fromEntries(SCANNERS.map(s => [s.id, 'idle'])));
+    setScannerOut({});
+    setCandidates({});
+    setEvents([]);
+    setReportFindings([]);
+    setReportRejected([]);
   }
 
-  function addEvent(kind, msg) {
-    const list = $('evList');
-    if (evCount === 0) list.innerHTML = '';  // clear empty state
-    const ts = new Date().toLocaleTimeString([], { hour12: false });
-    const row = document.createElement('div');
-    row.className = 'ev';
-    row.innerHTML = `
-      <span class="ev-ts">${ts}</span>
-      <span class="ev-kind ${kind}">${kind}</span>
-      <span class="ev-msg">${msg}</span>`;
-    list.prepend(row);
-    evCount++;
-    $('evCount').textContent = evCount;
-  }
+  async function runAudit() {
+    if (esRef.current) esRef.current.close();
+    reset();
+    setPlayState('running');
 
-  async function fetchAndRenderReport(workflowID) {
+    let wfId = null;
     try {
-      const resp = await fetch('/report?workflow_id=' + encodeURIComponent(workflowID));
+      const resp = await fetch('/run', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       if (!resp.ok) {
-        addEvent('error', 'fetch report failed: ' + resp.statusText);
+        appendEvent({ kind: 'error', msg: 'run failed: ' + resp.statusText });
+        setPlayState('idle');
         return;
       }
-      const out = await resp.json();
-      const findings = out.Report?.Findings || [];
-      const rejected = out.Report?.Rejected || [];
-      renderFindings(findings, rejected);
+      const data = await resp.json();
+      wfId = data.workflow_id;
+      setWorkflowId(wfId);
     } catch (e) {
-      addEvent('error', 'fetch report: ' + e);
-    }
-  }
-
-  function renderFindings(accepted, rejected) {
-    const list = $('fList');
-    list.innerHTML = '';
-    $('fCount').textContent = String(accepted.length);
-    if (accepted.length === 0 && rejected.length === 0) {
-      list.innerHTML = '<div class="empty">No findings.</div>';
+      appendEvent({ kind: 'error', msg: 'run failed: ' + e });
+      setPlayState('idle');
       return;
     }
-    for (const f of accepted) {
-      list.appendChild(renderFinding(f, false));
-    }
-    if (rejected.length > 0) {
-      const sep = document.createElement('div');
-      sep.style.cssText = 'margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint);';
-      sep.textContent = `Rejected by Critic (${rejected.length})`;
-      list.appendChild(sep);
-      for (const r of rejected) {
-        list.appendChild(renderFinding(r.Candidate || r, true, r.Reason, r.ConvergeWorkflowID));
-      }
-    }
+
+    const es = new EventSource('/events?workflow_id=' + encodeURIComponent(wfId));
+    esRef.current = es;
+    const onMsg = (m) => {
+      try { handleEvent(JSON.parse(m.data)); }
+      catch (e) { console.warn('parse', e); }
+    };
+    es.onmessage = onMsg;
+    ['workflow.started','workflow.completed','workflow.failed',
+     'node.started','node.completed','node.failed'].forEach(k => es.addEventListener(k, onMsg));
+    es.onerror = () => { es.close(); esRef.current = null; };
   }
 
-  function renderFinding(f, isRejected, rejectionReason, rejectedConvergeID) {
-    const sev = f.Severity || 'INFO';
-    const card = document.createElement('div');
-    card.className = `finding severity-${sev}` + (isRejected ? ' rejected' : '');
-    const convergeID = isRejected
-      ? (rejectedConvergeID || f.ConvergeWorkflowID || '')
-      : (f.ConvergeWorkflowID || '');
-    const temporalLink = convergeID
-      ? `<a class="tmp-link" href="http://localhost:8080/namespaces/default/workflows/${encodeURIComponent(convergeID)}" target="_blank">TMP →</a>`
-      : '';
-    const rationale = isRejected
-      ? `<div class="f-rationale rejected">${escapeHTML(rejectionReason || '')}</div>`
-      : (f.LLMRationale
-          ? `<div class="f-rationale"><span class="rationale-label">Critic rationale:</span> ${escapeHTML(f.LLMRationale)}</div>`
-          : '');
-    const evidence = (f.Evidence || []).slice(0, 2).map(e =>
-      `<span><b>${e.Kind || ''}</b> @ ${e.Location || ''}</span>`
-    ).join('');
-    const rounds = f.ConvergeRounds ? ` · ${f.ConvergeRounds} round${f.ConvergeRounds>1?'s':''}` : '';
-    card.innerHTML = `
-      <div class="f-head">
-        <div class="f-title">${escapeHTML(f.Title || '(no title)')}</div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          ${temporalLink}
-          <div class="f-sev ${sev}">${isRejected ? 'REJECTED' : sev}</div>
-        </div>
-      </div>
-      <div class="f-desc">${escapeHTML(f.Description || '')}</div>
-      ${rationale}
-      <div class="f-meta">
-        <span><b>scanner:</b> ${f.ScannerID || '?'}</span>
-        <span><b>category:</b> ${f.Category || '?'}</span>
-        ${evidence}
-        <span><b>converge:</b> ${convergeID ? convergeID.slice(0,30)+'...' : '—'}${rounds}</span>
-      </div>`;
-    return card;
+  function appendEvent(e) {
+    setEvents(prev => [{ ...e, key: Date.now() + '-' + Math.random() }, ...prev].slice(0, 300));
   }
 
-  function escapeHTML(s) {
-    return String(s).replace(/[&<>"']/g, c => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[c]));
-  }
+  function handleEvent(raw) {
+    const ev = { kind: raw.kind, ...(raw.payload || {}) };
+    const ts = new Date().toLocaleTimeString([], { hour12: false });
 
-  function setWorkflowState(state, wfID) {
-    const banner = $('wfBanner');
-    if (wfID) banner.classList.remove('idle');
-    $('wfId').textContent = wfID || '—';
-    $('wfStatus').textContent = state;
-    $('wfStatus').className = `wf-status ${state}`;
-    $('wfPulse').className = `wf-pulse ${state}`;
-  }
-
-  // Handle a single SSE event payload (already JSON-parsed)
-  function handleEvent(ev) {
-    const kind = ev.kind || 'unknown';
-    switch (kind) {
+    switch (ev.kind) {
       case 'workflow.started':
-        setWorkflowState('running', ev.workflow_id);
-        addEvent('workflow.started', `audit started: <b>${ev.workflow_id}</b>`);
+        appendEvent({ kind: 'workflow-started', label: 'workflow.started',
+          msg: `audit started: ${ev.workflow_id}`, ts });
         break;
       case 'workflow.completed':
-        setWorkflowState('completed', ev.workflow_id);
-        addEvent('workflow.completed',
-          `audit complete in <b>${(ev.duration_ms/1000).toFixed(1)}s</b> — ${ev.output?.findings_count ?? 0} findings`);
-        fetchAndRenderReport(ev.workflow_id);
+        setPlayState('done');
+        appendEvent({ kind: 'workflow-completed', label: 'workflow.completed',
+          msg: `audit complete in ${(ev.duration_ms/1000).toFixed(1)}s`, ts });
+        fetchReport(ev.workflow_id || workflowId);
         break;
       case 'workflow.failed':
-        setWorkflowState('failed', ev.workflow_id);
-        addEvent('workflow.failed', `audit failed: ${ev.error || 'unknown error'}`);
+        setPlayState('done');
+        appendEvent({ kind: 'workflow-failed', label: 'workflow.failed',
+          msg: `audit failed: ${ev.error || ''}`, ts });
         break;
       case 'node.started': {
-        const nid = ev.node_id;
-        scanners.set(nid, { label: ev.label, status: 'running', output: null });
-        renderScanners();
-        addEvent('node.started', `<b>${ev.label || nid}</b> started`);
+        const nid = ev.node_id || '';
+        if (nid.startsWith('converge:')) {
+          const cid = nid.slice('converge:'.length);
+          setCandidates(prev => ({ ...prev, [cid]: {
+            status: 'running', label: ev.label || cid, severity: null, rounds: 0,
+          }}));
+          appendEvent({ kind: 'node-started', label: 'converge.start',
+            msg: <><span className="mono">{cid}</span> running researcher/critic</>, ts });
+        } else {
+          setScanner(prev => ({ ...prev, [nid]: 'running' }));
+          appendEvent({ kind: 'node-started', label: 'node.started',
+            msg: <><b>{labelFor(nid)}</b> started</>, ts });
+        }
         break;
       }
       case 'node.completed': {
-        const nid = ev.node_id;
-        const existing = scanners.get(nid) || {};
-        scanners.set(nid, {
-          label: ev.label || existing.label,
-          status: 'completed',
-          output: ev.output,
-          durationMs: ev.duration_ms,
-        });
-        renderScanners();
-        const summary = ev.output && typeof ev.output === 'object'
-          ? Object.entries(ev.output).map(([k,v]) => `${k}=${v}`).join(' · ')
-          : '';
-        addEvent('node.completed', `<b>${ev.label || nid}</b> done (${(ev.duration_ms/1000).toFixed(2)}s) ${summary}`);
+        const nid = ev.node_id || '';
+        if (nid.startsWith('converge:')) {
+          const cid = nid.slice('converge:'.length);
+          const out = ev.output || {};
+          setCandidates(prev => ({ ...prev, [cid]: {
+            status: 'accepted', label: ev.label || cid,
+            severity: out.severity || null, rounds: out.rounds || 0,
+            convergeWorkflowID: out.converge_workflow_id || '',
+          }}));
+          appendEvent({ kind: 'node-completed', label: 'converge.accept',
+            msg: <><span className="mono">{cid}</span> accepted, severity <b>{out.severity}</b> · {out.rounds} round{(out.rounds||1)>1?'s':''}</>, ts });
+        } else {
+          setScanner(prev => ({ ...prev, [nid]: 'completed' }));
+          setScannerOut(prev => ({ ...prev, [nid]: ev.output }));
+          const summary = ev.output && typeof ev.output === 'object'
+            ? Object.entries(ev.output).map(([k,v]) => `${k}=${v}`).join(' · ') : '';
+          appendEvent({ kind: 'node-completed', label: 'node.completed',
+            msg: <><b>{labelFor(nid)}</b> done ({(ev.duration_ms/1000).toFixed(2)}s) {summary}</>, ts });
+        }
         break;
       }
       case 'node.failed': {
-        const nid = ev.node_id;
-        scanners.set(nid, { label: ev.label, status: 'failed', output: null });
-        renderScanners();
-        addEvent('node.failed', `<b>${ev.label || nid}</b> failed: ${ev.error || ''}`);
+        const nid = ev.node_id || '';
+        if (nid.startsWith('converge:')) {
+          const cid = nid.slice('converge:'.length);
+          setCandidates(prev => ({ ...prev, [cid]: {
+            status: 'rejected', label: ev.label || cid, severity: null, rounds: 0,
+          }}));
+          appendEvent({ kind: 'node-failed', label: 'converge.reject',
+            msg: <><span className="mono">{cid}</span> rejected: {(ev.error||'').slice(0,60)}</>, ts });
+        } else {
+          setScanner(prev => ({ ...prev, [nid]: 'failed' }));
+          appendEvent({ kind: 'node-failed', label: 'node.failed',
+            msg: <><b>{labelFor(nid)}</b> failed: {ev.error || ''}</>, ts });
+        }
         break;
       }
-      default:
-        addEvent(kind, JSON.stringify(ev).slice(0, 80));
     }
   }
 
-  // The workflow.completed event from the server includes a summary but
-  // NOT the per-finding payload. Once an audit ends we hit a follow-up
-  // endpoint to fetch the report. (Not implemented server-side yet —
-  // see TODO.) For the demo, we surface findings via /events when scanners
-  // emit them (future enhancement) or render the summary from the
-  // workflow.completed output.
-  // For now: show finding count from the completed event; the per-finding
-  // view requires the next iteration (broker emits FindingProduced events).
-
-  // --- Actions ---
-  $('run').addEventListener('click', async () => {
-    if (es) { es.close(); es = null; }
-    $('run').disabled = true;
+  async function fetchReport(wfId) {
+    if (!wfId) return;
     try {
-      const resp = await fetch('/run', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),  // server fills defaults
-      });
-      if (!resp.ok) {
-        addEvent('error', 'run failed: ' + resp.statusText);
-        $('run').disabled = false;
-        return;
-      }
-      const { workflow_id } = await resp.json();
-      es = new EventSource('/events?workflow_id=' + encodeURIComponent(workflow_id));
-      es.onmessage = (m) => {
-        try { handleEvent(JSON.parse(m.data)); }
-        catch (e) { console.warn('parse', e, m.data); }
-      };
-      ['node.started','node.completed','node.failed',
-       'workflow.started','workflow.completed','workflow.failed'].forEach(k => {
-        es.addEventListener(k, (m) => {
-          try { handleEvent(JSON.parse(m.data)); }
-          catch (e) { console.warn('parse', e, m.data); }
-        });
-      });
-      es.onerror = () => {
-        // Server closes after terminal event — natural.
-        $('run').disabled = false;
-        if (es) { es.close(); es = null; }
-      };
-    } catch (e) {
-      addEvent('error', String(e));
-      $('run').disabled = false;
-    }
-  });
+      const r = await fetch('/report?workflow_id=' + encodeURIComponent(wfId));
+      if (!r.ok) return;
+      const out = await r.json();
+      setReportFindings(out.Report?.Findings || []);
+      setReportRejected(out.Report?.Rejected || []);
+    } catch (e) { console.warn('report fetch', e); }
+  }
 
-  $('reset').addEventListener('click', () => {
-    if (es) { es.close(); es = null; }
-    evCount = 0; findings = []; scanners.clear();
-    $('evCount').textContent = '0';
-    $('fCount').textContent = '0';
-    $('evList').innerHTML = '<div class="empty">Click "Run Audit" to start an audit. Scanner events will stream here as they fire.</div>';
-    $('fList').innerHTML = '<div class="empty">No findings yet.</div>';
-    renderScanners();
-    $('wfBanner').classList.add('idle');
-    $('run').disabled = false;
-  });
+  useEffect(() => () => { if (esRef.current) esRef.current.close(); }, []);
 
-  // Initial paint
-  renderScanners();
-})();
+  function inferParent(cid) {
+    if (cid.startsWith('stale-oauth-') || cid.startsWith('oauth-')) return 'oauth';
+    if (cid.startsWith('over-priv-') || cid.startsWith('overpriv-')) return 'scopes';
+    if (cid.startsWith('dormant-iam-') || cid.startsWith('dorm-')) return 'dormancy';
+    return 'secrets';
+  }
+
+  const candidatesByParent = useMemo(() => {
+    const out = { secrets: [], oauth: [], scopes: [], dormancy: [] };
+    Object.entries(candidates).forEach(([cid, c]) => {
+      out[inferParent(cid)].push({ id: cid, ...c });
+    });
+    return out;
+  }, [candidates]);
+
+  const acceptedCount = useMemo(() =>
+    Object.values(candidates).filter(c => c.status === 'accepted').length, [candidates]);
+  const rejectedCount = useMemo(() =>
+    Object.values(candidates).filter(c => c.status === 'rejected').length, [candidates]);
+  const runningCount = useMemo(() =>
+    Object.values(candidates).filter(c => c.status === 'running').length, [candidates]);
+
+  const parentURL = workflowId ? TEMPORAL_BASE + workflowId : null;
+  const openParent = () => parentURL && window.open(parentURL, '_blank');
+  const openConverge = (childWfID) => childWfID && window.open(TEMPORAL_BASE + childWfID, '_blank');
+
+  return (
+    <div className="app">
+      <header>
+        <div className="brand">
+          <span className="brand-mark">Sibyl Sentry</span>
+          <span className="brand-sub">live audit</span>
+        </div>
+        <div className="tabs">
+          <button className={"tab " + (tab === 'list' ? 'active' : '')} onClick={() => setTab('list')}>
+            List <span className="badge">{events.length}</span>
+          </button>
+          <button className={"tab " + (tab === 'dag' ? 'active' : '')} onClick={() => setTab('dag')}>
+            DAG <span className="badge">{Object.keys(candidates).length + 4}</span>
+          </button>
+        </div>
+        <div className="top-actions">
+          <div className={"phase-pill " + (playState === 'running' ? 'live' : '')}>
+            <span className="dot"></span>
+            {playState === 'running' ? 'live' : playState === 'done' ? 'done' : 'idle'}
+          </div>
+          <button className="btn" onClick={reset} disabled={playState === 'idle'}>Reset</button>
+          <button className="btn btn-primary" onClick={runAudit} disabled={playState === 'running'}>
+            {playState === 'done' ? 'Run Again' : 'Run Audit'}
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <div className={"panel panel-list " + (tab === 'list' ? 'active' : '')}>
+          <ListView scanner={scanner} scannerOut={scannerOut}
+            events={events} workflowId={workflowId} playState={playState}
+            findings={reportFindings} rejected={reportRejected}
+            openParent={openParent} openConverge={openConverge} />
+        </div>
+        <div className={"panel panel-dag " + (tab === 'dag' ? 'active' : '')}>
+          <DagView scanner={scanner} scannerOut={scannerOut}
+            candidates={candidates} candidatesByParent={candidatesByParent}
+            workflowId={workflowId} playState={playState}
+            acceptedCount={acceptedCount} rejectedCount={rejectedCount}
+            runningCount={runningCount}
+            openParent={openParent} openConverge={openConverge} />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function labelFor(scannerId) {
+  const s = SCANNERS.find(s => s.id === scannerId);
+  return s ? s.label : scannerId;
+}
+
+function ListView({ scanner, scannerOut, events, workflowId, playState, findings, rejected, openParent, openConverge }) {
+  const bannerStatus = playState === 'running' ? 'running' : playState === 'done' ? 'completed' : 'idle';
+  const bannerLabel = playState === 'running' ? 'running...' : playState === 'done' ? 'completed' : 'idle';
+
+  return (
+    <>
+      <aside className="scanners">
+        <div className="side-title">Scanners</div>
+        {SCANNERS.map(s => {
+          const status = scanner[s.id] || 'idle';
+          const out = scannerOut[s.id];
+          return (
+            <div key={s.id} className={"scanner-card " + status}>
+              <div className="scanner-head">
+                <span className="scanner-name">{s.label}</span>
+                <span className="scanner-status">{status}</span>
+              </div>
+              <div className="scanner-body">
+                {out ? Object.entries(out).map(([k,v]) => (
+                  <div key={k} className="pair"><span>{k}</span><b>{String(v)}</b></div>
+                )) : <div style={{color:'var(--ink-faint)', fontStyle:'italic'}}>{status === 'running' ? 'fetching from ' + s.sub + '...' : s.sub}</div>}
+              </div>
+            </div>
+          );
+        })}
+        <div className="side-title" style={{marginTop: 28}}>Vendor Sources</div>
+        <div className="scanner-card">
+          <div className="scanner-head"><span className="scanner-name">Okta</span><span className="scanner-status">:9001</span></div>
+          <div className="scanner-body">Admin API · users · groups · apps · logs</div>
+        </div>
+        <div className="scanner-card">
+          <div className="scanner-head"><span className="scanner-name">AWS IAM</span><span className="scanner-status">:9002</span></div>
+          <div className="scanner-body">Users · access keys · roles · policies</div>
+        </div>
+        <div className="scanner-card">
+          <div className="scanner-head"><span className="scanner-name">GitHub</span><span className="scanner-status">:9003</span></div>
+          <div className="scanner-body">Members · repos · teams · collaborators</div>
+        </div>
+      </aside>
+
+      <section className="stream">
+        <div className="wf-banner">
+          <div className={"wf-pulse " + bannerStatus}></div>
+          <div className="wf-id">
+            <span className="label">workflow</span>
+            {workflowId ? <a onClick={openParent}>{workflowId}</a> : <span>—</span>}
+          </div>
+          <div className={"wf-status " + bannerStatus}>{bannerLabel}</div>
+        </div>
+
+        <div className="events">
+          <div className="section-head">
+            <span className="section-title">Live Event Stream</span>
+            <span className="section-count">{events.length}</span>
+          </div>
+          <div className="scroll">
+            {events.length === 0
+              ? <div style={{color:'var(--ink-faint)', fontStyle:'italic', textAlign:'center', padding:'20px'}}>Click "Run Audit" to start.</div>
+              : events.map(e => (
+                  <div key={e.key} className="ev">
+                    <span className="ev-ts">{e.ts}</span>
+                    <span className={"ev-kind " + (e.kind || '')}>{e.label || e.kind}</span>
+                    <span className="ev-msg">{e.msg}</span>
+                  </div>
+                ))}
+          </div>
+        </div>
+
+        <div className="findings">
+          <div className="section-head">
+            <span className="section-title">Findings (Researcher / Critic Converged)</span>
+            <span className="section-count">{findings.length}</span>
+          </div>
+          <div className="scroll">
+            {findings.length === 0 && rejected.length === 0
+              ? <div style={{color:'var(--ink-faint)', fontStyle:'italic', textAlign:'center', padding:'20px'}}>No findings yet.</div>
+              : <>
+                  {findings.map(f => <FindingCard key={f.ID} f={f} rejected={false} openConverge={openConverge}/>)}
+                  {rejected.length > 0 && (
+                    <>
+                      <div className="rejected-divider">Rejected by Critic ({rejected.length})</div>
+                      {rejected.map((r, i) => <FindingCard key={i} f={r.Candidate || r} rejected={true} reason={r.Reason} convergeID={r.ConvergeWorkflowID} openConverge={openConverge}/>)}
+                    </>
+                  )}
+                </>}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function FindingCard({ f, rejected, reason, convergeID, openConverge }) {
+  const sev = f.Severity || 'INFO';
+  const cwfid = rejected ? (convergeID || f.ConvergeWorkflowID || '') : (f.ConvergeWorkflowID || '');
+  return (
+    <div className={"finding " + (rejected ? 'rejected ' : '') + 'severity-' + sev}>
+      <div className="f-head">
+        <div className="f-title">{f.Title || '(no title)'}</div>
+        <div className="f-head-right">
+          {cwfid && <a className="tmp-link" onClick={() => openConverge(cwfid)}>TMP →</a>}
+          <div className={"f-sev " + sev}>{rejected ? 'REJECTED' : sev}</div>
+        </div>
+      </div>
+      <div className="f-desc">{f.Description || ''}</div>
+      <div className={"f-rationale " + (rejected ? 'rejected' : '')}>
+        <span className="rationale-label">{rejected ? 'Critic rejection:' : 'Critic rationale:'}</span>
+        {rejected ? (reason || '') : (f.LLMRationale || '')}
+      </div>
+      <div className="f-meta">
+        <span><b>scanner:</b> {f.ScannerID}</span>
+        <span><b>category:</b> {f.Category}</span>
+        {f.ConvergeRounds > 0 && <span><b>rounds:</b> {f.ConvergeRounds}</span>}
+      </div>
+    </div>
+  );
+}
+
+function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflowId, playState,
+                   acceptedCount, rejectedCount, runningCount, openParent, openConverge }) {
+  const W = 1180;
+  const SCANNER_W = 200, SCANNER_H = 60;
+  const CAND_W = 90, CAND_H = 60, CAND_GAP_X = 8, CAND_GAP_Y = 8;
+  const CANDS_PER_ROW = 10;
+  const SCANNER_Y = 130;
+  const CAND_AREA_TOP = 220;
+
+  const scannerXs = { secrets: 60, oauth: 320, scopes: 620, dormancy: 920 };
+
+  function candidateLayout(parent) {
+    const startX = scannerXs[parent];
+    const cands = candidatesByParent[parent] || [];
+    return cands.map((c, idx) => {
+      const row = Math.floor(idx / CANDS_PER_ROW);
+      const col = idx % CANDS_PER_ROW;
+      return {
+        ...c, parent,
+        x: startX + col * (CAND_W + CAND_GAP_X),
+        y: CAND_AREA_TOP + row * (CAND_H + CAND_GAP_Y),
+      };
+    });
+  }
+
+  const candNodes = useMemo(() => {
+    return ['secrets', 'oauth', 'scopes', 'dormancy'].flatMap(candidateLayout);
+  }, [candidates]);
+
+  const maxCandY = candNodes.reduce((m, n) => Math.max(m, n.y), CAND_AREA_TOP);
+  const SYNTH_Y = maxCandY + CAND_H + 60;
+  const totalH = SYNTH_Y + 80;
+
+  const phase1Status = useMemo(() => {
+    const vals = Object.values(scanner);
+    if (vals.every(v => v === 'idle')) return 'idle';
+    if (vals.every(v => v === 'completed' || v === 'failed')) return 'completed';
+    return 'active';
+  }, [scanner]);
+
+  const phase2Status = useMemo(() => {
+    if (Object.keys(candidates).length === 0) return 'idle';
+    if (runningCount > 0) return 'active';
+    return 'completed';
+  }, [candidates, runningCount]);
+
+  const phase3Status = playState === 'done' ? 'completed' : 'idle';
+
+  function edgeForScanner(sid) {
+    const s = scanner[sid];
+    if (s === 'running')   return 'edge-active';
+    if (s === 'completed') return 'edge-done';
+    if (s === 'failed')    return 'edge-rejected';
+    return 'edge-base';
+  }
+  function edgeForCandidate(c) {
+    if (c.status === 'running')  return 'edge-active';
+    if (c.status === 'accepted') return 'edge-done';
+    if (c.status === 'rejected' || c.status === 'failed') return 'edge-rejected';
+    return 'edge-base';
+  }
+
+  return (
+    <>
+      <div className="dag-toolbar">
+        <div className="dag-summary">
+          <div className="stat"><span className="v">4</span><b>scanners</b></div>
+          <div className="stat"><span className="v">{Object.keys(candidates).length}</span><b>candidates</b></div>
+          <div className="stat"><span className="v">{acceptedCount}</span><b>accepted</b></div>
+          <div className="stat"><span className={"v " + (rejectedCount>0 ? 'crit' : '')}>{rejectedCount}</span><b>rejected</b></div>
+          {runningCount > 0 && <div className="stat"><span className="v" style={{color:'var(--sibyl)'}}>{runningCount}</span><b>running</b></div>}
+        </div>
+        <div className="dag-legend">
+          <span className="swatch"><span className="dot idle"></span> idle</span>
+          <span className="swatch"><span className="dot running"></span> running</span>
+          <span className="swatch"><span className="dot completed"></span> done</span>
+          <span className="swatch"><span className="dot rejected"></span> rejected</span>
+        </div>
+      </div>
+
+      <div className="dag-canvas">
+        <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg">
+          <text x={40} y={32} className={"phase-label " + phase1Status}>Phase 1 — Scanner Fan-Out</text>
+          <line x1={20} y1={SCANNER_Y + SCANNER_H + 20} x2={W-20} y2={SCANNER_Y + SCANNER_H + 20} className="phase-line"/>
+          <text x={40} y={SCANNER_Y + SCANNER_H + 40} className={"phase-label " + phase2Status}>Phase 2 — Convergence (Researcher / Critic per candidate)</text>
+          <line x1={20} y1={SYNTH_Y - 25} x2={W-20} y2={SYNTH_Y - 25} className="phase-line"/>
+          <text x={40} y={SYNTH_Y - 8} className={"phase-label " + phase3Status}>Phase 3 — Synthesis</text>
+
+          <Node x={(W - 280) / 2} y={20} w={280} h={70} cls={"root " + (playState === 'running' ? 'running' : playState === 'done' ? 'completed' : 'idle')}
+                onClick={openParent}>
+            <text x={140} y={26} textAnchor="middle" className="label">SecurityAuditWorkflow</text>
+            <text x={140} y={44} textAnchor="middle" className="sub">{workflowId || '—'}</text>
+            <text x={140} y={60} textAnchor="middle" className="badge">PARENT WORKFLOW</text>
+          </Node>
+
+          {SCANNERS.map(s => {
+            const sx = scannerXs[s.id] + SCANNER_W / 2;
+            return (
+              <path key={"e-root-"+s.id}
+                d={`M ${W/2} 90 L ${W/2} 110 L ${sx} 110 L ${sx} ${SCANNER_Y}`}
+                className={edgeForScanner(s.id)} />
+            );
+          })}
+
+          {SCANNERS.map(s => {
+            const status = scanner[s.id] || 'idle';
+            const out = scannerOut[s.id] || {};
+            const subText = status === 'completed' && out.findings_count !== undefined
+              ? `${out.findings_count} candidate${out.findings_count !== 1 ? 's' : ''}`
+              : status === 'running' ? 'fetching...' : s.sub;
+            return (
+              <Node key={s.id} x={scannerXs[s.id]} y={SCANNER_Y} w={SCANNER_W} h={SCANNER_H}
+                    cls={"scanner " + status} onClick={openParent}>
+                <text x={SCANNER_W/2} y={20} textAnchor="middle" className="label">{s.label}</text>
+                <text x={SCANNER_W/2} y={36} textAnchor="middle" className="sub">{s.sub}</text>
+                <text x={SCANNER_W/2} y={52} textAnchor="middle" className="badge">{subText}</text>
+              </Node>
+            );
+          })}
+
+          {candNodes.map(c => {
+            const fromX = scannerXs[c.parent] + SCANNER_W / 2;
+            const fromY = SCANNER_Y + SCANNER_H;
+            const toX = c.x + CAND_W / 2;
+            const toY = c.y;
+            const midY = (fromY + toY) / 2;
+            return (
+              <path key={"e-c-"+c.id}
+                d={`M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`}
+                className={edgeForCandidate(c)} />
+            );
+          })}
+
+          {candNodes.map(c => (
+            <Node key={c.id} x={c.x} y={c.y} w={CAND_W} h={CAND_H}
+                  cls={"converge " + c.status} onClick={() => openConverge(c.convergeWorkflowID)}>
+              <text x={CAND_W/2} y={18} textAnchor="middle" className="label" style={{fontSize: '9px'}}>
+                {c.id.length > 14 ? c.id.slice(0,12)+'..' : c.id}
+              </text>
+              {c.severity && <text x={CAND_W/2} y={34} textAnchor="middle" className={"sev " + c.severity}>{c.severity}</text>}
+              <text x={CAND_W/2} y={50} textAnchor="middle" className="badge" style={{fontSize: '8px'}}>
+                {c.status === 'accepted' ? `ACCEPTED · ${c.rounds}R`
+                  : c.status === 'rejected' ? `REJECTED`
+                  : c.status === 'running' ? 'RUNNING' : 'PENDING'}
+              </text>
+            </Node>
+          ))}
+
+          {candNodes.length === 0 && (
+            <text x={W/2} y={CAND_AREA_TOP + 80} textAnchor="middle" className="empty-state">
+              {playState === 'idle' ? 'Click "Run Audit" to begin.' : 'Waiting for scanner candidates...'}
+            </text>
+          )}
+
+          {candNodes.map(c => {
+            if (c.status === 'idle' || c.status === 'running') return null;
+            const fromX = c.x + CAND_W / 2;
+            const fromY = c.y + CAND_H;
+            const toX = c.status === 'accepted' ? (W/2 - 100) : (W/2 + 100);
+            return (
+              <path key={"e-synth-"+c.id}
+                d={`M ${fromX} ${fromY} L ${fromX} ${SYNTH_Y - 30} L ${toX} ${SYNTH_Y - 30} L ${toX} ${SYNTH_Y}`}
+                className={edgeForCandidate(c)} />
+            );
+          })}
+
+          <Node x={W/2 - 220} y={SYNTH_Y} w={200} h={60}
+                cls={"root " + (acceptedCount > 0 ? 'completed' : 'idle')}
+                onClick={openParent}>
+            <text x={100} y={22} textAnchor="middle" className="label">Synthesized Report</text>
+            <text x={100} y={40} textAnchor="middle" className="sub" style={{fill: 'var(--ok)'}}>
+              {acceptedCount} accepted
+            </text>
+            <text x={100} y={54} textAnchor="middle" className="badge">PARENT WORKFLOW</text>
+          </Node>
+
+          <g transform={`translate(${W/2 + 20}, ${SYNTH_Y})`}>
+            <rect width={200} height={60} rx={2}
+              fill="var(--bg-1)" stroke="var(--ink-faint)" strokeWidth={1} strokeDasharray="2,2"
+              style={{opacity: rejectedCount > 0 ? 1 : 0.4}}/>
+            <text x={100} y={22} textAnchor="middle" className="label" style={{fill: 'var(--ink-faint)'}}>Rejected log</text>
+            <text x={100} y={40} textAnchor="middle" className="sub" style={{fill: 'var(--ink-faint)'}}>
+              {rejectedCount} rejection{rejectedCount !== 1 ? 's' : ''}
+            </text>
+            <text x={100} y={54} textAnchor="middle" className="badge" style={{fill: 'var(--ink-faint)'}}>AUDIT TRAIL</text>
+          </g>
+        </svg>
+      </div>
+    </>
+  );
+}
+
+function Node({ x, y, w, h, cls, onClick, children }) {
+  return (
+    <g className={"node-g " + cls} transform={`translate(${x}, ${y})`} onClick={onClick}>
+      <rect width={w} height={h} rx={2}/>
+      <rect className="node-pulse" x={-2} y={-2} width={w+4} height={h+4} rx={4}/>
+      {children}
+    </g>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
+
 </body>
 </html>

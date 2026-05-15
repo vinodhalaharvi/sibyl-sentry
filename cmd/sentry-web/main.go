@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
@@ -109,6 +110,9 @@ func main() {
 	w.RegisterActivityWithOptions(oauth.ScanStale, oauthActivityOptions())
 	w.RegisterActivityWithOptions(scopes.ScanOverPrivilege, scopesActivityOptions())
 	w.RegisterActivityWithOptions(dormancy.ScanIAM, dormancyActivityOptions())
+	w.RegisterActivityWithOptions(audit.ConvergeEmitActivity, activity.RegisterOptions{
+		Name: "ConvergeEmitActivity",
+	})
 	jiraActs := jira.NewActivities(jira.NewMockClient(), resolver)
 	w.RegisterActivityWithOptions(jiraActs.CreateTicket, jiraActivityOptions())
 
@@ -364,7 +368,15 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			payload, err := json.Marshal(ev)
+			// Wrap in an envelope so the JSON `data:` payload carries an
+			// explicit "kind" field. Real Sibyl's event structs don't
+			// serialize their kind into the body (Kind() is a method,
+			// not a struct tag), so the UI needs the wrapper to switch
+			// on event type without parsing the SSE event: line.
+			payload, err := json.Marshal(map[string]interface{}{
+				"kind":    string(ev.Kind()),
+				"payload": ev,
+			})
 			if err != nil {
 				continue
 			}

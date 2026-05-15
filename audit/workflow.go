@@ -291,10 +291,22 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 
 	parentID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
+	// Light activity options for the convergence event emits — these are
+	// fire-and-forget log messages, not durable state.
+	emitCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    100 * time.Millisecond,
+			BackoffCoefficient: 1.5,
+			MaximumAttempts:    2,
+		},
+	})
+
 	type kicked struct {
 		candidate  findings.Finding
 		future     workflow.ChildWorkflowFuture
 		childWfID  string
+		startedAt  time.Time
 	}
 	var fans []kicked
 
@@ -305,10 +317,7 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 			WorkflowID:        childWfID,
 			TaskQueue:         workflow.GetInfo(ctx).TaskQueueName,
 			WorkflowRunTimeout: 5 * time.Minute,
-			// Parent-close policy: terminate children if parent is
-			// terminated. ABANDON-children would leave orphaned
-			// converges running after a cancelled audit.
-			ParentClosePolicy: 1, // = TERMINATE
+			ParentClosePolicy: 1,
 		}
 		childCtx := workflow.WithChildOptions(ctx, childOpts)
 
@@ -320,7 +329,18 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 			sibylproxy.ConvergeWorkflowName,
 			question,
 		)
-		fans = append(fans, kicked{candidate: c, future: f, childWfID: childWfID})
+
+		// Emit node.started for this converge child. Fire-and-forget —
+		// we don't block on the emit completing.
+		_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
+			ParentWorkflowID: parentID,
+			Kind:             "node.started",
+			CandidateID:      c.ID,
+			CandidateTitle:   c.Title,
+			ChildWorkflowID:  childWfID,
+		})
+
+		fans = append(fans, kicked{candidate: c, future: f, childWfID: childWfID, startedAt: workflow.Now(ctx)})
 	}
 
 	var accepted []findings.Finding
@@ -338,16 +358,24 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 				RejectedAt:         workflow.Now(ctx),
 				ConvergeWorkflowID: k.childWfID,
 			})
+			_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
+				ParentWorkflowID: parentID,
+				Kind:             "node.failed",
+				CandidateID:      k.candidate.ID,
+				CandidateTitle:   k.candidate.Title,
+				ChildWorkflowID:  k.childWfID,
+				Reason:           "workflow error: " + err.Error(),
+				DurationMs:       workflow.Now(ctx).Sub(k.startedAt).Milliseconds(),
+			})
 			continue
 		}
 
 		result := prompts.ParseConvergedAnswer(answer.Text)
 		now := workflow.Now(ctx)
+		durMs := now.Sub(k.startedAt).Milliseconds()
 
 		if result.Accepted {
 			final := k.candidate
-			// Carry over the LLM-reassigned severity. The original scanner
-			// severity is preserved in the candidate field for audit.
 			final.Severity = result.Severity
 			final.LLMRationale = result.Rationale
 			if result.Description != "" {
@@ -357,6 +385,17 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 			final.ConvergeRounds = answer.Rounds
 			final.ConvergeWorkflowID = k.childWfID
 			accepted = append(accepted, final)
+			_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
+				ParentWorkflowID: parentID,
+				Kind:             "node.completed",
+				CandidateID:      k.candidate.ID,
+				CandidateTitle:   k.candidate.Title,
+				ChildWorkflowID:  k.childWfID,
+				Severity:         result.Severity.String(),
+				Rounds:           answer.Rounds,
+				Accepted:         true,
+				DurationMs:       durMs,
+			})
 		} else {
 			reason := result.Rationale
 			if reason == "" {
@@ -368,6 +407,16 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 				RejectedAt:         now,
 				ConvergeRounds:     answer.Rounds,
 				ConvergeWorkflowID: k.childWfID,
+			})
+			_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
+				ParentWorkflowID: parentID,
+				Kind:             "node.failed",
+				CandidateID:      k.candidate.ID,
+				CandidateTitle:   k.candidate.Title,
+				ChildWorkflowID:  k.childWfID,
+				Reason:           reason,
+				Rounds:           answer.Rounds,
+				DurationMs:       durMs,
 			})
 		}
 	}
