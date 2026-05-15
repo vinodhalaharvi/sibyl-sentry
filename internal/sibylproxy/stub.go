@@ -105,6 +105,17 @@ func ScriptedComplete(response string) CompleteFunc {
 	}
 }
 
+// PickBackend in stub mode always returns a canned ACCEPTED scripted
+// CompleteFunc, regardless of the requested name. This keeps the
+// cmd/sentry-web flag plumbing portable across stub and real builds.
+func PickBackend(name, model string) (CompleteFunc, error) {
+	_ = name
+	_ = model
+	return ScriptedComplete(
+		"DECISION: ACCEPTED\nSEVERITY: HIGH\nRATIONALE: Stub mode — no real LLM call. Evidence accepted as-is.\nREVISED_DESCRIPTION: (stub) original description retained.",
+	), nil
+}
+
 // ---------------------------------------------------------------------------
 // Event types — mirror Sibyl's agent.Event surface for what Sentry emits.
 // ---------------------------------------------------------------------------

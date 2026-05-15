@@ -6,6 +6,7 @@ package sibylproxy
 
 import (
 	"context"
+	"fmt"
 
 	"go.temporal.io/sdk/worker"
 
@@ -37,6 +38,37 @@ func RegisterEngine(w worker.Worker, complete CompleteFunc) {
 func ScriptedComplete(response string) CompleteFunc {
 	return func(_ context.Context, _, _ string) (string, error) {
 		return response, nil
+	}
+}
+
+// PickBackend resolves a backend name to a CompleteFunc, matching Sibyl's
+// cmd/api-server semantics:
+//
+//   "scripted"     → static response (for CI / smoke tests)
+//   "anthropic"    → Sibyl's Anthropic client (needs ANTHROPIC_API_KEY)
+//   "claude-code"  → Sibyl's Claude Code client (uses local CC session)
+//
+// model is the LLM model name (passed through to the backend); empty
+// means "the backend's default".
+func PickBackend(name, model string) (CompleteFunc, error) {
+	switch name {
+	case "scripted":
+		s := &agent.ScriptedLLM{Cycle: true, Responses: []string{
+			"DECISION: ACCEPTED\nSEVERITY: HIGH\nRATIONALE: Scripted backend — evidence accepted as-is for smoke testing.\nREVISED_DESCRIPTION: (scripted) original description retained.",
+		}}
+		return s.Complete, nil
+	case "anthropic":
+		cfg := agent.AnthropicConfig{Model: model}
+		c, err := agent.NewAnthropicClient(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("anthropic client: %w", err)
+		}
+		return c.Complete, nil
+	case "claude-code":
+		cfg := agent.ClaudeCodeConfig{Model: model}
+		return agent.NewClaudeCodeClient(cfg).Complete, nil
+	default:
+		return nil, fmt.Errorf("unknown llm backend %q (try: scripted | anthropic | claude-code)", name)
 	}
 }
 

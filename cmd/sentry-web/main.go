@@ -67,6 +67,8 @@ func main() {
 	taskQueue := flag.String("queue", "sentry", "Task queue name")
 	ownersPath := flag.String("owners", "../sibyl-sentry-fixtures/sentry-config/owners.json", "Path to owners.json")
 	defaultTarget := flag.String("default-target", "../sibyl-sentry-fixtures", "Default scan target (fixtures repo)")
+	llmBackend := flag.String("llm", "scripted", "LLM backend for Researcher/Critic: scripted | anthropic | claude-code")
+	llmModel := flag.String("model", "", "LLM model name (empty = backend's default)")
 	flag.Parse()
 
 	// 1. Broker registered globally so all in-process activities emit
@@ -90,9 +92,15 @@ func main() {
 
 	w := worker.New(tc, *taskQueue, worker.Options{})
 
-	// Sibyl's Researcher/Critic. Scripted in stub mode; the real binary
-	// would wire Anthropic / Claude Code.
-	complete := sibylproxy.ScriptedComplete("ACCEPTED: evidence is concrete and verifiable.")
+	// Sibyl's Researcher/Critic. The -llm flag picks which backend:
+	//   scripted     → canned ACCEPTED (CI/smoke test)
+	//   anthropic    → Anthropic API (needs ANTHROPIC_API_KEY)
+	//   claude-code  → local Claude Code session
+	complete, err := sibylproxy.PickBackend(*llmBackend, *llmModel)
+	if err != nil {
+		log.Fatalf("llm backend: %v", err)
+	}
+	log.Printf("llm backend: %s (model=%q)", *llmBackend, *llmModel)
 	sibylproxy.RegisterEngine(w, complete)
 
 	// Sentry workflow + activities.
