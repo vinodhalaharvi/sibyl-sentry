@@ -330,15 +330,17 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 			question,
 		)
 
-		// Emit node.started for this converge child. Fire-and-forget —
-		// we don't block on the emit completing.
+		// Emit node.started for this converge child. Synchronous —
+		// .Get() blocks until the activity completes. With many
+		// candidates this adds a few seconds total, but eliminates any
+		// possible non-determinism from fire-and-forget scheduling.
 		_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
 			ParentWorkflowID: parentID,
 			Kind:             "node.started",
 			CandidateID:      c.ID,
 			CandidateTitle:   c.Title,
 			ChildWorkflowID:  childWfID,
-		})
+		}).Get(ctx, nil)
 
 		fans = append(fans, kicked{candidate: c, future: f, childWfID: childWfID, startedAt: workflow.Now(ctx)})
 	}
@@ -366,7 +368,7 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 				ChildWorkflowID:  k.childWfID,
 				Reason:           "workflow error: " + err.Error(),
 				DurationMs:       workflow.Now(ctx).Sub(k.startedAt).Milliseconds(),
-			})
+			}).Get(ctx, nil)
 			continue
 		}
 
@@ -395,7 +397,7 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 				Rounds:           answer.Rounds,
 				Accepted:         true,
 				DurationMs:       durMs,
-			})
+			}).Get(ctx, nil)
 		} else {
 			reason := result.Rationale
 			if reason == "" {
@@ -417,7 +419,7 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 				Reason:           reason,
 				Rounds:           answer.Rounds,
 				DurationMs:       durMs,
-			})
+			}).Get(ctx, nil)
 		}
 	}
 
