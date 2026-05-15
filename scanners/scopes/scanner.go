@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
+	"github.com/vinodhalaharvi/sibyl-sentry/internal/sibylproxy"
 	"github.com/vinodhalaharvi/sibyl-sentry/okta"
 )
 
@@ -39,18 +40,30 @@ type ScanOutput struct {
 // ScanOverPrivilege walks every OAuth client and produces a finding for
 // each one with granted scopes that haven't been exercised.
 func ScanOverPrivilege(ctx context.Context, in ScanInput) (*ScanOutput, error) {
+	const nodeID = "scopes"
+	const label = "Over-Privilege"
+	started := time.Now()
+	emitter := sibylproxy.EmitterForActivity(ctx)
+	emitter.Emit(sibylproxy.NewNodeStarted("", nodeID, label))
+
 	if in.OktaBaseURL == "" {
-		return nil, errors.New("scopes.ScanOverPrivilege: OktaBaseURL required")
+		err := errors.New("scopes.ScanOverPrivilege: OktaBaseURL required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 	if in.OktaToken == "" {
-		return nil, errors.New("scopes.ScanOverPrivilege: OktaToken required")
+		err := errors.New("scopes.ScanOverPrivilege: OktaToken required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 
 	client := okta.New(in.OktaBaseURL, in.OktaToken)
 
 	apps, err := client.ListApps(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("scopes.ScanOverPrivilege: list apps: %w", err)
+		err = fmt.Errorf("scopes.ScanOverPrivilege: list apps: %w", err)
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 
 	out := &ScanOutput{ClientsReviewed: len(apps)}
@@ -116,6 +129,13 @@ func ScanOverPrivilege(ctx context.Context, in ScanInput) (*ScanOutput, error) {
 			ScannerID:    "scopes",
 		})
 	}
+	emitter.Emit(sibylproxy.NewNodeCompleted("", nodeID, label,
+		map[string]interface{}{
+			"clients_reviewed": out.ClientsReviewed,
+			"findings_count":   len(out.Findings),
+		},
+		time.Since(started),
+	))
 	return out, nil
 }
 

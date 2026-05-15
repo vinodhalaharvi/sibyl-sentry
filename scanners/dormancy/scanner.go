@@ -16,6 +16,7 @@ import (
 
 	"github.com/vinodhalaharvi/sibyl-sentry/aws"
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
+	"github.com/vinodhalaharvi/sibyl-sentry/internal/sibylproxy"
 )
 
 const ActivityName = "dormancy.ScanIAM"
@@ -39,11 +40,21 @@ type ScanOutput struct {
 // ScanIAM walks IAM users and their access keys; flags users with any
 // Active key past the dormancy threshold.
 func ScanIAM(ctx context.Context, in ScanInput) (*ScanOutput, error) {
+	const nodeID = "dormancy"
+	const label = "Dormant SAs"
+	started := time.Now()
+	emitter := sibylproxy.EmitterForActivity(ctx)
+	emitter.Emit(sibylproxy.NewNodeStarted("", nodeID, label))
+
 	if in.AWSBaseURL == "" {
-		return nil, errors.New("dormancy.ScanIAM: AWSBaseURL required")
+		err := errors.New("dormancy.ScanIAM: AWSBaseURL required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 	if in.AWSToken == "" {
-		return nil, errors.New("dormancy.ScanIAM: AWSToken required")
+		err := errors.New("dormancy.ScanIAM: AWSToken required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 	threshold := in.DormancyThreshold
 	if threshold == 0 {
@@ -54,7 +65,9 @@ func ScanIAM(ctx context.Context, in ScanInput) (*ScanOutput, error) {
 
 	users, err := client.ListUsers(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("dormancy.ScanIAM: list users: %w", err)
+		err = fmt.Errorf("dormancy.ScanIAM: list users: %w", err)
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 
 	out := &ScanOutput{UsersReviewed: len(users)}
@@ -134,6 +147,14 @@ func ScanIAM(ctx context.Context, in ScanInput) (*ScanOutput, error) {
 			ScannerID:    "dormancy",
 		})
 	}
+	emitter.Emit(sibylproxy.NewNodeCompleted("", nodeID, label,
+		map[string]interface{}{
+			"users_reviewed":   out.UsersReviewed,
+			"keys_reviewed":    out.KeysReviewed,
+			"findings_count":   len(out.Findings),
+		},
+		time.Since(started),
+	))
 	return out, nil
 }
 

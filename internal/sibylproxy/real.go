@@ -1,9 +1,7 @@
 //go:build !sibyl_stub
 
 // Package sibylproxy: real-Sibyl adapter. When building without the
-// sibyl_stub tag, this file aliases the proxy types to the real Sibyl
-// package types, so Sentry code that references sibylproxy.* compiles
-// against real Sibyl without any code changes.
+// sibyl_stub tag, this file aliases the proxy types to real Sibyl.
 package sibylproxy
 
 import (
@@ -18,9 +16,7 @@ import (
 // CompleteFunc aliases Sibyl's LLM seam type.
 type CompleteFunc = agent.CompleteFunc
 
-// Question and Answer alias Sibyl's input/output types for the ConvergeWorkflow.
-// If real Sibyl's types differ (e.g. it uses agent.Question with different
-// fields), adjust these aliases; the rest of Sentry uses sibylproxy.Question.
+// Question and Answer alias Sibyl's input/output types.
 type Question = agent.Question
 type Answer = agent.Answer
 
@@ -30,10 +26,57 @@ func RegisterEngine(w worker.Worker, complete CompleteFunc) {
 }
 
 // ScriptedComplete returns a CompleteFunc that returns the given response
-// for any prompt. Real Sibyl exposes ScriptedLLM; this is a thin convenience
-// for parity with the stub.
+// for any prompt.
 func ScriptedComplete(response string) CompleteFunc {
 	return func(_ context.Context, _, _ string) (string, error) {
 		return response, nil
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Event types — aliased to Sibyl's agent.Event hierarchy.
+// ---------------------------------------------------------------------------
+
+// Event is Sibyl's event interface.
+type Event = agent.Event
+
+// Concrete event types.
+type WorkflowStarted = agent.WorkflowStarted
+type WorkflowCompleted = agent.WorkflowCompleted
+type WorkflowFailed = agent.WorkflowFailed
+type NodeStarted = agent.NodeStarted
+type NodeCompleted = agent.NodeCompleted
+type NodeFailed = agent.NodeFailed
+
+// Constructors aliased.
+var (
+	NewWorkflowStarted   = agent.NewWorkflowStarted
+	NewWorkflowCompleted = agent.NewWorkflowCompleted
+	NewWorkflowFailed    = agent.NewWorkflowFailed
+	NewNodeStarted       = agent.NewNodeStarted
+	NewNodeCompleted     = agent.NewNodeCompleted
+	NewNodeFailed        = agent.NewNodeFailed
+)
+
+// ---------------------------------------------------------------------------
+// Broker + Emitter aliased.
+// ---------------------------------------------------------------------------
+
+// Broker aliases Sibyl's broker interface.
+type Broker = agent.Broker
+
+// MemoryBroker is the in-process default broker.
+type MemoryBroker = agent.MemoryBroker
+
+// NewMemoryBroker constructs one.
+var NewMemoryBroker = agent.NewMemoryBroker
+
+// SetGlobalBroker registers the process-wide broker.
+var SetGlobalBroker = agent.SetGlobalBroker
+
+// Emitter is the workflow-scoped publisher.
+type Emitter = agent.Emitter
+
+// EmitterForActivity returns the Emitter tied to the current activity's
+// workflow ID via Sibyl's helper.
+var EmitterForActivity = agent.EmitterForActivity

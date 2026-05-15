@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
+	"github.com/vinodhalaharvi/sibyl-sentry/internal/sibylproxy"
 	"github.com/vinodhalaharvi/sibyl-sentry/okta"
 )
 
@@ -44,11 +45,21 @@ type ScanOutput struct {
 // ScanStale enumerates OAuth clients and produces a finding for each
 // one that's been idle past the threshold while still active.
 func ScanStale(ctx context.Context, in ScanInput) (*ScanOutput, error) {
+	const nodeID = "oauth"
+	const label = "Stale OAuth"
+	started := time.Now()
+	emitter := sibylproxy.EmitterForActivity(ctx)
+	emitter.Emit(sibylproxy.NewNodeStarted("", nodeID, label))
+
 	if in.OktaBaseURL == "" {
-		return nil, errors.New("oauth.ScanStale: OktaBaseURL required")
+		err := errors.New("oauth.ScanStale: OktaBaseURL required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 	if in.OktaToken == "" {
-		return nil, errors.New("oauth.ScanStale: OktaToken required")
+		err := errors.New("oauth.ScanStale: OktaToken required")
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 	threshold := in.StalenessThreshold
 	if threshold == 0 {
@@ -59,7 +70,9 @@ func ScanStale(ctx context.Context, in ScanInput) (*ScanOutput, error) {
 
 	apps, err := client.ListApps(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("oauth.ScanStale: list apps: %w", err)
+		err = fmt.Errorf("oauth.ScanStale: list apps: %w", err)
+		emitter.Emit(sibylproxy.NewNodeFailed("", nodeID, label, err, time.Since(started)))
+		return nil, err
 	}
 
 	out := &ScanOutput{ClientsReviewed: len(apps)}
@@ -115,6 +128,13 @@ func ScanStale(ctx context.Context, in ScanInput) (*ScanOutput, error) {
 			ScannerID:    "oauth",
 		})
 	}
+	emitter.Emit(sibylproxy.NewNodeCompleted("", nodeID, label,
+		map[string]interface{}{
+			"clients_reviewed": out.ClientsReviewed,
+			"findings_count":   len(out.Findings),
+		},
+		time.Since(started),
+	))
 	return out, nil
 }
 

@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sibyl Sentry — Live Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b; --bg-1: #121214; --bg-2: #1a1a1d;
+    --line: #26262a; --line-strong: #3a3a40;
+    --ink: #e8e8e0; --ink-dim: #8a8a82; --ink-faint: #55554e;
+    --sibyl: #f4f028;
+    --accent: #ff6a3d;
+    --ok: #6eff8a; --running: #7ab8ff; --warn: #f5c451; --crit: #ff4d4d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.5; height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 5% 0%, rgba(244,240,40,0.04), transparent 50%),
+      radial-gradient(ellipse at 95% 100%, rgba(255,106,61,0.06), transparent 50%),
+      var(--bg);
+  }
+
+  .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+  /* --- Top bar --- */
+  header {
+    border-bottom: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr auto; align-items: center;
+    padding: 0 22px;
+  }
+  .brand {
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  .brand-mark {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    color: var(--accent); font-size: 22px; letter-spacing: -0.5px;
+  }
+  .brand-sub {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .top-actions { display: flex; gap: 10px; }
+  .btn {
+    background: var(--bg-1); color: var(--ink);
+    border: 1px solid var(--line-strong);
+    padding: 7px 14px; font-family: inherit; font-size: 11px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary {
+    background: var(--accent); color: #0a0a0b; border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: var(--ink); border-color: var(--ink); }
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .btn a { color: inherit; text-decoration: none; }
+
+  /* --- Main grid --- */
+  main {
+    display: grid; grid-template-columns: 360px 1fr;
+    overflow: hidden;
+  }
+
+  /* --- Left: scanner status panel --- */
+  .scanners {
+    border-right: 1px solid var(--line);
+    padding: 16px 18px; overflow-y: auto;
+  }
+  .panel-title {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 14px;
+  }
+  .scanner-card {
+    border: 1px solid var(--line); margin-bottom: 12px;
+    background: var(--bg-1);
+    transition: border-color 0.2s;
+  }
+  .scanner-card.running { border-color: var(--sibyl); }
+  .scanner-card.completed { border-color: var(--ok); }
+  .scanner-card.failed { border-color: var(--crit); }
+
+  .scanner-head {
+    padding: 9px 12px;
+    display: grid; grid-template-columns: 1fr auto; align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .scanner-name { font-size: 12px; font-weight: 500; }
+  .scanner-status {
+    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .scanner-card.running .scanner-status { color: var(--sibyl); }
+  .scanner-card.completed .scanner-status { color: var(--ok); }
+  .scanner-card.failed .scanner-status { color: var(--crit); }
+
+  .scanner-body { padding: 8px 12px 10px; font-size: 11px; color: var(--ink-dim); }
+  .scanner-body .pair { display: flex; justify-content: space-between; }
+  .scanner-body .pair b { color: var(--ink); }
+
+  /* --- Right: event stream + findings --- */
+  .stream { display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; }
+
+  .events {
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .findings {
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  .section-head {
+    padding: 10px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline;
+    background: var(--bg-1);
+  }
+  .section-title {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .section-count {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 18px; color: var(--accent);
+  }
+
+  .scroll { overflow-y: auto; padding: 8px 18px 16px; flex: 1; }
+
+  /* Event rows */
+  .ev {
+    font-size: 11px; padding: 4px 0; display: grid;
+    grid-template-columns: 70px 110px 1fr; gap: 10px; align-items: baseline;
+    border-bottom: 1px solid transparent;
+  }
+  .ev-ts { color: var(--ink-faint); font-size: 10px; }
+  .ev-kind {
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 2px 6px; align-self: center;
+    border: 1px solid var(--line-strong);
+  }
+  .ev-kind.node\.started   { color: var(--sibyl);   border-color: var(--sibyl);   }
+  .ev-kind.node\.completed { color: var(--ok);      border-color: var(--ok);      }
+  .ev-kind.node\.failed    { color: var(--crit);    border-color: var(--crit);    }
+  .ev-kind.workflow\.started   { color: var(--running); border-color: var(--running); }
+  .ev-kind.workflow\.completed { color: var(--ok);      border-color: var(--ok);      }
+  .ev-kind.workflow\.failed    { color: var(--crit);    border-color: var(--crit);    }
+  .ev-msg { color: var(--ink-dim); }
+  .ev-msg b { color: var(--ink); font-weight: 500; }
+
+  /* Finding cards */
+  .finding {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--bg-1); margin-bottom: 10px; padding: 12px 14px;
+  }
+  .finding.severity-CRITICAL { border-left-color: var(--crit); }
+  .finding.severity-HIGH     { border-left-color: var(--accent); }
+  .finding.severity-MEDIUM   { border-left-color: var(--warn); }
+  .finding.severity-LOW      { border-left-color: var(--ink-dim); }
+
+  .f-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .f-title { font-size: 12px; color: var(--ink); font-weight: 500; }
+  .f-sev   {
+    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  .f-sev.CRITICAL { color: var(--crit); }
+  .f-sev.HIGH     { color: var(--accent); }
+  .f-sev.MEDIUM   { color: var(--warn); }
+  .f-sev.LOW      { color: var(--ink-dim); }
+
+  .f-desc { font-size: 11px; color: var(--ink-dim); margin-bottom: 8px; line-height: 1.6; }
+  .f-meta {
+    font-size: 10px; color: var(--ink-faint);
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .f-meta b { color: var(--ink-dim); }
+
+  /* Empty/initial state */
+  .empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--ink-faint); font-style: italic; font-size: 12px;
+    font-family: 'Instrument Serif', serif;
+  }
+
+  /* Workflow header */
+  .wf-banner {
+    margin: 12px 18px 0; padding: 12px 16px;
+    background: var(--bg-1); border: 1px solid var(--line-strong);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 18px;
+    align-items: center;
+  }
+  .wf-banner.idle { display: none; }
+  .wf-id {
+    font-size: 11px; color: var(--ink); letter-spacing: 0.02em;
+  }
+  .wf-id .label {
+    color: var(--ink-faint); font-size: 9px; letter-spacing: 0.15em;
+    text-transform: uppercase; margin-right: 8px;
+  }
+  .wf-status {
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  }
+  .wf-status.running { color: var(--sibyl); }
+  .wf-status.completed { color: var(--ok); }
+  .wf-status.failed { color: var(--crit); }
+  .wf-pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-faint);
+  }
+  .wf-pulse.running { background: var(--sibyl); animation: pulse 1.4s ease-in-out infinite; }
+  .wf-pulse.completed { background: var(--ok); }
+  .wf-pulse.failed { background: var(--crit); }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <span class="brand-mark">Sibyl Sentry</span>
+      <span class="brand-sub">live audit · stub mode</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="reset">Clear</button>
+      <button class="btn btn-primary" id="run">Run Audit</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="scanners">
+      <div class="panel-title">Scanners</div>
+      <div id="scannerList">
+        <!-- populated as NodeStarted events arrive -->
+      </div>
+      <div class="panel-title" style="margin-top: 28px;">Vendor Sources</div>
+      <div class="scanner-card">
+        <div class="scanner-head">
+          <span class="scanner-name">Okta</span>
+          <span class="scanner-status">:9001</span>
+        </div>
+        <div class="scanner-body">Admin API · users · groups · apps · logs</div>
+      </div>
+      <div class="scanner-card">
+        <div class="scanner-head">
+          <span class="scanner-name">AWS IAM</span>
+          <span class="scanner-status">:9002</span>
+        </div>
+        <div class="scanner-body">Users · access keys · roles · policies</div>
+      </div>
+      <div class="scanner-card">
+        <div class="scanner-head">
+          <span class="scanner-name">GitHub</span>
+          <span class="scanner-status">:9003</span>
+        </div>
+        <div class="scanner-body">Members · repos · teams · collaborators</div>
+      </div>
+    </aside>
+
+    <section class="stream">
+      <div class="wf-banner idle" id="wfBanner">
+        <div class="wf-pulse" id="wfPulse"></div>
+        <div class="wf-id"><span class="label">workflow</span><span id="wfId">—</span></div>
+        <div class="wf-status" id="wfStatus">idle</div>
+      </div>
+
+      <div class="events">
+        <div class="section-head">
+          <span class="section-title">Live Event Stream</span>
+          <span class="section-count" id="evCount">0</span>
+        </div>
+        <div class="scroll" id="evList">
+          <div class="empty">Click "Run Audit" to start an audit. Scanner events will stream here as they fire.</div>
+        </div>
+      </div>
+
+      <div class="findings">
+        <div class="section-head">
+          <span class="section-title">Findings</span>
+          <span class="section-count" id="fCount">0</span>
+        </div>
+        <div class="scroll" id="fList">
+          <div class="empty">No findings yet.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // UI state
+  let evCount = 0;
+  let findings = [];
+  const scanners = new Map(); // node_id → { label, status, durationMs, output }
+  let es = null;
+
+  // Render helpers
+  function renderScanners() {
+    const list = $('scannerList');
+    list.innerHTML = '';
+    if (scanners.size === 0) {
+      list.innerHTML = `<div style="color:var(--ink-faint); font-size:11px; font-style:italic; font-family:'Instrument Serif',serif;">Waiting for first run.</div>`;
+      return;
+    }
+    for (const [nodeID, s] of scanners) {
+      const card = document.createElement('div');
+      card.className = `scanner-card ${s.status}`;
+      const summary = s.output
+        ? Object.entries(s.output).map(([k, v]) => `<div class="pair"><span>${k}</span><b>${v}</b></div>`).join('')
+        : `<div style="color:var(--ink-faint);">running…</div>`;
+      card.innerHTML = `
+        <div class="scanner-head">
+          <span class="scanner-name">${s.label || nodeID}</span>
+          <span class="scanner-status">${s.status}</span>
+        </div>
+        <div class="scanner-body">${summary}</div>`;
+      list.appendChild(card);
+    }
+  }
+
+  function addEvent(kind, msg) {
+    const list = $('evList');
+    if (evCount === 0) list.innerHTML = '';  // clear empty state
+    const ts = new Date().toLocaleTimeString([], { hour12: false });
+    const row = document.createElement('div');
+    row.className = 'ev';
+    row.innerHTML = `
+      <span class="ev-ts">${ts}</span>
+      <span class="ev-kind ${kind}">${kind}</span>
+      <span class="ev-msg">${msg}</span>`;
+    list.prepend(row);
+    evCount++;
+    $('evCount').textContent = evCount;
+  }
+
+  function renderFinding(f) {
+    const sev = f.Severity || 'INFO';
+    const card = document.createElement('div');
+    card.className = `finding severity-${sev}`;
+    const evidence = (f.Evidence || []).slice(0, 2).map(e =>
+      `<span><b>${e.Kind || ''}</b> @ ${e.Location || ''}</span>`
+    ).join('');
+    card.innerHTML = `
+      <div class="f-head">
+        <div class="f-title">${escapeHTML(f.Title || '(no title)')}</div>
+        <div class="f-sev ${sev}">${sev}</div>
+      </div>
+      <div class="f-desc">${escapeHTML(f.Description || '')}</div>
+      <div class="f-meta">
+        <span><b>scanner:</b> ${f.ScannerID || '?'}</span>
+        <span><b>category:</b> ${f.Category || '?'}</span>
+        ${evidence}
+      </div>`;
+    return card;
+  }
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function setWorkflowState(state, wfID) {
+    const banner = $('wfBanner');
+    if (wfID) banner.classList.remove('idle');
+    $('wfId').textContent = wfID || '—';
+    $('wfStatus').textContent = state;
+    $('wfStatus').className = `wf-status ${state}`;
+    $('wfPulse').className = `wf-pulse ${state}`;
+  }
+
+  // Handle a single SSE event payload (already JSON-parsed)
+  function handleEvent(ev) {
+    const kind = ev.kind || 'unknown';
+    switch (kind) {
+      case 'workflow.started':
+        setWorkflowState('running', ev.workflow_id);
+        addEvent('workflow.started', `audit started: <b>${ev.workflow_id}</b>`);
+        break;
+      case 'workflow.completed':
+        setWorkflowState('completed', ev.workflow_id);
+        addEvent('workflow.completed',
+          `audit complete in <b>${(ev.duration_ms/1000).toFixed(1)}s</b> — ${ev.output?.findings_count ?? 0} findings`);
+        break;
+      case 'workflow.failed':
+        setWorkflowState('failed', ev.workflow_id);
+        addEvent('workflow.failed', `audit failed: ${ev.error || 'unknown error'}`);
+        break;
+      case 'node.started': {
+        const nid = ev.node_id;
+        scanners.set(nid, { label: ev.label, status: 'running', output: null });
+        renderScanners();
+        addEvent('node.started', `<b>${ev.label || nid}</b> started`);
+        break;
+      }
+      case 'node.completed': {
+        const nid = ev.node_id;
+        const existing = scanners.get(nid) || {};
+        scanners.set(nid, {
+          label: ev.label || existing.label,
+          status: 'completed',
+          output: ev.output,
+          durationMs: ev.duration_ms,
+        });
+        renderScanners();
+        const summary = ev.output && typeof ev.output === 'object'
+          ? Object.entries(ev.output).map(([k,v]) => `${k}=${v}`).join(' · ')
+          : '';
+        addEvent('node.completed', `<b>${ev.label || nid}</b> done (${(ev.duration_ms/1000).toFixed(2)}s) ${summary}`);
+        break;
+      }
+      case 'node.failed': {
+        const nid = ev.node_id;
+        scanners.set(nid, { label: ev.label, status: 'failed', output: null });
+        renderScanners();
+        addEvent('node.failed', `<b>${ev.label || nid}</b> failed: ${ev.error || ''}`);
+        break;
+      }
+      default:
+        addEvent(kind, JSON.stringify(ev).slice(0, 80));
+    }
+  }
+
+  // The workflow.completed event from the server includes a summary but
+  // NOT the per-finding payload. Once an audit ends we hit a follow-up
+  // endpoint to fetch the report. (Not implemented server-side yet —
+  // see TODO.) For the demo, we surface findings via /events when scanners
+  // emit them (future enhancement) or render the summary from the
+  // workflow.completed output.
+  // For now: show finding count from the completed event; the per-finding
+  // view requires the next iteration (broker emits FindingProduced events).
+
+  // --- Actions ---
+  $('run').addEventListener('click', async () => {
+    if (es) { es.close(); es = null; }
+    $('run').disabled = true;
+    try {
+      const resp = await fetch('/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),  // server fills defaults
+      });
+      if (!resp.ok) {
+        addEvent('error', 'run failed: ' + resp.statusText);
+        $('run').disabled = false;
+        return;
+      }
+      const { workflow_id } = await resp.json();
+      es = new EventSource('/events?workflow_id=' + encodeURIComponent(workflow_id));
+      es.onmessage = (m) => {
+        try { handleEvent(JSON.parse(m.data)); }
+        catch (e) { console.warn('parse', e, m.data); }
+      };
+      ['node.started','node.completed','node.failed',
+       'workflow.started','workflow.completed','workflow.failed'].forEach(k => {
+        es.addEventListener(k, (m) => {
+          try { handleEvent(JSON.parse(m.data)); }
+          catch (e) { console.warn('parse', e, m.data); }
+        });
+      });
+      es.onerror = () => {
+        // Server closes after terminal event — natural.
+        $('run').disabled = false;
+        if (es) { es.close(); es = null; }
+      };
+    } catch (e) {
+      addEvent('error', String(e));
+      $('run').disabled = false;
+    }
+  });
+
+  $('reset').addEventListener('click', () => {
+    if (es) { es.close(); es = null; }
+    evCount = 0; findings = []; scanners.clear();
+    $('evCount').textContent = '0';
+    $('fCount').textContent = '0';
+    $('evList').innerHTML = '<div class="empty">Click "Run Audit" to start an audit. Scanner events will stream here as they fire.</div>';
+    $('fList').innerHTML = '<div class="empty">No findings yet.</div>';
+    renderScanners();
+    $('wfBanner').classList.add('idle');
+    $('run').disabled = false;
+  });
+
+  // Initial paint
+  renderScanners();
+})();
+</script>
+</body>
+</html>
