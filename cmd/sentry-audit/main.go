@@ -1,9 +1,12 @@
 // Command sentry-audit submits a SecurityAuditWorkflow against a target
-// directory and prints the synthesized report when complete.
+// and prints the synthesized report when complete.
 //
 // Usage:
 //
-//	sentry-audit -target ../sibyl-sentry-fixtures
+//	sentry-audit \
+//	  -target ../sibyl-sentry-fixtures \
+//	  -okta-url http://localhost:9001 -okta-token demo-okta \
+//	  -aws-url http://localhost:9002 -aws-token demo-aws
 package main
 
 import (
@@ -25,19 +28,31 @@ func main() {
 	var (
 		temporalAddr = flag.String("temporal", "localhost:7233", "Temporal server address")
 		taskQueue    = flag.String("queue", "sentry", "Task queue name")
-		target       = flag.String("target", "", "Target path to scan (required)")
-		fileTickets  = flag.Bool("file-tickets", true, "File Jira tickets for findings")
-		jsonOut      = flag.Bool("json", false, "Print JSON output (default: human-readable)")
-		minSev       = flag.String("min-severity", "high", "Minimum severity to file tickets: info|low|medium|high|critical")
+		target       = flag.String("target", "", "Target path to scan (for the secrets scanner)")
+
+		oktaURL    = flag.String("okta-url", "http://localhost:9001", "Okta API base URL (mock or real)")
+		oktaToken  = flag.String("okta-token", "demo-okta-token", "Okta API token (SSWS)")
+		awsURL     = flag.String("aws-url", "http://localhost:9002", "AWS IAM API base URL (mock)")
+		awsToken   = flag.String("aws-token", "demo-aws-token", "AWS API token")
+		ghURL      = flag.String("github-url", "http://localhost:9003", "GitHub API base URL (mock or real)")
+		ghToken    = flag.String("github-token", "demo-github-token", "GitHub API token")
+
+		fileTickets = flag.Bool("file-tickets", true, "File Jira tickets for findings")
+		jsonOut     = flag.Bool("json", false, "Print JSON output (default: human-readable)")
+		minSev      = flag.String("min-severity", "high", "Minimum severity to file tickets: info|low|medium|high|critical")
 	)
 	flag.Parse()
 
 	if *target == "" {
-		log.Fatal("missing -target")
+		log.Println("note: -target not set; secrets scanner will be skipped")
 	}
-	abs, err := filepath.Abs(*target)
-	if err != nil {
-		log.Fatalf("resolve target: %v", err)
+	var abs string
+	if *target != "" {
+		var err error
+		abs, err = filepath.Abs(*target)
+		if err != nil {
+			log.Fatalf("resolve target: %v", err)
+		}
 	}
 
 	c, err := client.Dial(client.Options{HostPort: *temporalAddr})
@@ -48,10 +63,14 @@ func main() {
 
 	in := audit.AuditInput{
 		TargetPath: abs,
-		Inventories: audit.Inventories{
-			OAuthClients: filepath.Join(abs, "config/oauth-clients.json"),
+		VendorEndpoints: audit.VendorEndpoints{
+			OktaBaseURL:   *oktaURL,
+			OktaToken:     *oktaToken,
+			AWSBaseURL:    *awsURL,
+			AWSToken:      *awsToken,
+			GitHubBaseURL: *ghURL,
+			GitHubToken:   *ghToken,
 		},
-		EnabledScanners:   []audit.ScannerID{audit.ScannerSecrets, audit.ScannerOAuth},
 		FileTickets:       *fileTickets,
 		MinTicketSeverity: parseSeverity(*minSev),
 	}

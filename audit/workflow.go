@@ -1,17 +1,16 @@
 // Package audit defines SecurityAuditWorkflow — Sentry's domain-specific
-// Supervisor workflow. Unlike Sibyl's heuristic decomposer (which splits
-// natural-language questions), this workflow decomposes by a fixed
-// security checklist: which scanners to run against the target.
+// Supervisor workflow. Decomposes by a fixed security checklist: which
+// scanners to run against the target.
 //
 // The workflow:
-//  1. Resolves the checklist from the input (which scanners to run).
+//  1. Resolves the checklist (which scanners are enabled).
 //  2. Fans out: one activity invocation per scanner, in parallel.
 //  3. Each scanner's findings flow through a Critic step (when LLM is wired).
 //  4. Synthesizes findings into a Report.
 //  5. For findings above the severity threshold, fans out Jira ticket creation.
 //
-// For the hackathon scaffold this is the deterministic backbone; LLM-backed
-// Critic + Researcher wraps come from Sibyl's ConvergeWorkflow once wired.
+// Scanners now call vendor APIs over HTTP (mock or real). Config carries
+// the per-vendor base URL + token.
 package audit
 
 import (
@@ -23,23 +22,28 @@ import (
 
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
 	"github.com/vinodhalaharvi/sibyl-sentry/jira"
+	"github.com/vinodhalaharvi/sibyl-sentry/scanners/dormancy"
 	"github.com/vinodhalaharvi/sibyl-sentry/scanners/oauth"
 	"github.com/vinodhalaharvi/sibyl-sentry/scanners/regex"
+	"github.com/vinodhalaharvi/sibyl-sentry/scanners/scopes"
 )
 
 const WorkflowName = "SecurityAuditWorkflow"
 
 // AuditInput is the workflow's input.
 type AuditInput struct {
-	// TargetPath is the directory to scan (typically a checked-out git repo).
+	// TargetPath is the directory to scan for secrets (regex/YARA).
+	// For audits where there's no code dimension, leave empty and
+	// exclude the "secrets" scanner.
 	TargetPath string
 
-	// Inventories points scanners at their JSON inputs. In production these
-	// would be replaced by API-call activities; for the hackathon they're
-	// paths into the fixtures repo.
-	Inventories Inventories
+	// VendorEndpoints carry the base URLs and tokens for the vendor
+	// APIs the API-fed scanners hit (Okta, AWS, GitHub).
+	VendorEndpoints VendorEndpoints
 
-	// EnabledScanners selects which scanners to run. Empty means all.
+	// EnabledScanners selects which scanners to run. Empty means "all
+	// configured" (a scanner is auto-skipped if its required endpoint
+	// isn't provided).
 	EnabledScanners []ScannerID
 
 	// FileTickets, if true, fans out Jira ticket creation after synthesis.
@@ -49,12 +53,14 @@ type AuditInput struct {
 	MinTicketSeverity findings.Severity
 }
 
-// Inventories points scanners at their input data.
-type Inventories struct {
-	OAuthClients     string // path to oauth-clients.json
-	ScopeGrants      string // path to scope-grants.json
-	ScopeUsage       string // path to scope-usage.json
-	ServiceAccounts  string // path to service-accounts.json
+// VendorEndpoints groups the per-vendor connection config.
+type VendorEndpoints struct {
+	OktaBaseURL   string
+	OktaToken     string
+	AWSBaseURL    string
+	AWSToken      string
+	GitHubBaseURL string
+	GitHubToken   string
 }
 
 // ScannerID identifies a scanner in the checklist.
@@ -62,11 +68,10 @@ type ScannerID string
 
 const (
 	ScannerSecrets  ScannerID = "secrets"   // regex (or yara w/ build tag)
-	ScannerOAuth    ScannerID = "oauth"
-	// Future:
-	ScannerScopes   ScannerID = "scopes"
-	ScannerReuse    ScannerID = "reuse"
-	ScannerDormancy ScannerID = "dormancy"
+	ScannerOAuth    ScannerID = "oauth"     // stale OAuth grants
+	ScannerScopes   ScannerID = "scopes"    // over-privilege
+	ScannerDormancy ScannerID = "dormancy"  // dormant IAM users
+	// Future: ScannerReuse, ScannerBlast
 )
 
 // AuditOutput is the synthesized result.
@@ -75,6 +80,7 @@ type AuditOutput struct {
 	Tickets []TicketResult
 }
 
+// TicketResult records what happened with each ticket-creation attempt.
 type TicketResult struct {
 	FindingID string
 	Filed     bool
@@ -92,12 +98,19 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 
 	enabled := in.EnabledScanners
 	if len(enabled) == 0 {
-		enabled = []ScannerID{ScannerSecrets, ScannerOAuth}
+		// Default: every scanner whose required config is set.
+		if in.TargetPath != "" {
+			enabled = append(enabled, ScannerSecrets)
+		}
+		if in.VendorEndpoints.OktaBaseURL != "" {
+			enabled = append(enabled, ScannerOAuth, ScannerScopes)
+		}
+		if in.VendorEndpoints.AWSBaseURL != "" {
+			enabled = append(enabled, ScannerDormancy)
+		}
 	}
 
-	// Long scans need patient activity timeouts and heartbeats. Regex scan
-	// on a small fixture repo is fast, but YARA + history on a real repo
-	// can take minutes.
+	// Long scans need patient activity timeouts and heartbeats.
 	scanOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
 		HeartbeatTimeout:    1 * time.Minute,
@@ -120,18 +133,43 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 	for _, id := range enabled {
 		switch id {
 		case ScannerSecrets:
+			if in.TargetPath == "" {
+				log.Warn("secrets scanner enabled but TargetPath empty; skipping")
+				continue
+			}
 			f := workflow.ExecuteActivity(ctx, regex.ActivityName, regex.ScanInput{
 				TargetPath:  in.TargetPath,
 				ScanHistory: true,
 			})
 			futures[id] = f
 		case ScannerOAuth:
-			if in.Inventories.OAuthClients == "" {
-				log.Warn("oauth scanner enabled but no inventory path; skipping")
+			if in.VendorEndpoints.OktaBaseURL == "" {
+				log.Warn("oauth scanner enabled but Okta endpoint missing; skipping")
 				continue
 			}
 			f := workflow.ExecuteActivity(ctx, oauth.ActivityName, oauth.ScanInput{
-				InventoryPath: in.Inventories.OAuthClients,
+				OktaBaseURL: in.VendorEndpoints.OktaBaseURL,
+				OktaToken:   in.VendorEndpoints.OktaToken,
+			})
+			futures[id] = f
+		case ScannerScopes:
+			if in.VendorEndpoints.OktaBaseURL == "" {
+				log.Warn("scopes scanner enabled but Okta endpoint missing; skipping")
+				continue
+			}
+			f := workflow.ExecuteActivity(ctx, scopes.ActivityName, scopes.ScanInput{
+				OktaBaseURL: in.VendorEndpoints.OktaBaseURL,
+				OktaToken:   in.VendorEndpoints.OktaToken,
+			})
+			futures[id] = f
+		case ScannerDormancy:
+			if in.VendorEndpoints.AWSBaseURL == "" {
+				log.Warn("dormancy scanner enabled but AWS endpoint missing; skipping")
+				continue
+			}
+			f := workflow.ExecuteActivity(ctx, dormancy.ActivityName, dormancy.ScanInput{
+				AWSBaseURL: in.VendorEndpoints.AWSBaseURL,
+				AWSToken:   in.VendorEndpoints.AWSToken,
 			})
 			futures[id] = f
 		default:
@@ -149,6 +187,14 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 			results = append(results, scannerResult{id: id, findings: out.Findings, err: err})
 		case ScannerOAuth:
 			var out oauth.ScanOutput
+			err := f.Get(ctx, &out)
+			results = append(results, scannerResult{id: id, findings: out.Findings, err: err})
+		case ScannerScopes:
+			var out scopes.ScanOutput
+			err := f.Get(ctx, &out)
+			results = append(results, scannerResult{id: id, findings: out.Findings, err: err})
+		case ScannerDormancy:
+			var out dormancy.ScanOutput
 			err := f.Get(ctx, &out)
 			results = append(results, scannerResult{id: id, findings: out.Findings, err: err})
 		}

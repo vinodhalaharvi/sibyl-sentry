@@ -12,11 +12,11 @@ import (
 func ownersPath(t *testing.T) string {
 	t.Helper()
 	candidates := []string{
-		"../../sibyl-sentry-fixtures/config/owners.json",
-		"../sibyl-sentry-fixtures/config/owners.json",
+		"../../sibyl-sentry-fixtures/sentry-config/owners.json",
+		"../sibyl-sentry-fixtures/sentry-config/owners.json",
 	}
 	if env := os.Getenv("SENTRY_FIXTURES_PATH"); env != "" {
-		candidates = append([]string{filepath.Join(env, "config/owners.json")}, candidates...)
+		candidates = append([]string{filepath.Join(env, "sentry-config/owners.json")}, candidates...)
 	}
 	for _, c := range candidates {
 		abs, _ := filepath.Abs(c)
