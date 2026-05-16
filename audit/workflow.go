@@ -86,6 +86,17 @@ type AuditInput struct {
 	// Scanners typically return candidates in priority/severity order, so
 	// the cap keeps the most important findings.
 	MaxCandidatesPerScanner int
+
+	// PostToChannels, when true, posts each accepted finding to configured
+	// human-facing channels (Slack, etc.) via the channels package. Requires
+	// channels activities to be registered on the worker. Default false:
+	// existing behavior is preserved unless explicitly opted in.
+	PostToChannels bool
+
+	// ChannelTraceURLBase is the Temporal Web UI base URL used to build
+	// deep-links in posted messages. Typical value: "http://localhost:8233".
+	// Optional; if empty, posted messages will not include a trace link.
+	ChannelTraceURLBase string
 }
 
 // VendorEndpoints groups per-vendor connection config.
@@ -110,8 +121,9 @@ const (
 
 // AuditOutput is the synthesized result.
 type AuditOutput struct {
-	Report  findings.Report
-	Tickets []TicketResult
+	Report       findings.Report
+	Tickets      []TicketResult
+	ChannelPosts []PostFindingsResult
 }
 
 // TicketResult records the outcome of each ticket-creation attempt.
@@ -168,12 +180,18 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 		tickets = fileTickets(ctx, report.Findings, in.MinTicketSeverity)
 	}
 
+	var channelPosts []PostFindingsResult
+	if in.PostToChannels && len(report.Findings) > 0 {
+		channelPosts = postFindings(ctx, report.Findings, in.ChannelTraceURLBase)
+	}
+
 	log.Info("audit complete",
 		"findings_accepted", len(report.Findings),
 		"findings_rejected", len(report.Rejected),
 		"errors", len(report.Errors),
-		"tickets", len(tickets))
-	return &AuditOutput{Report: report, Tickets: tickets}, nil
+		"tickets", len(tickets),
+		"channel_posts", len(channelPosts))
+	return &AuditOutput{Report: report, Tickets: tickets, ChannelPosts: channelPosts}, nil
 }
 
 // runScanners is Phase 1: schedule every enabled scanner in parallel,

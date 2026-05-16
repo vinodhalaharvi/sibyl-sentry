@@ -73,6 +73,8 @@ func main() {
 	llmModel := flag.String("model", "", "LLM model name (empty = backend's default)")
 	maxCands := flag.Int("max-candidates", 5, "Max candidates per scanner sent to convergence (0 = unlimited; bound LLM fan-out)")
 	temporalUIURL := flag.String("temporal-ui", "http://localhost:8233", "Temporal Web UI base URL (used for TMP→ deep links in the UI)")
+	slackToken := flag.String("slack-token", os.Getenv("SLACK_BOT_TOKEN"), "Slack bot token (xoxb-...); when set, accepted findings are posted to Slack")
+	slackChannel := flag.String("slack-channel", os.Getenv("SLACK_CHANNEL"), "Slack channel ID (C...) that accepted findings are posted to")
 	flag.Parse()
 
 	// 1. Broker registered globally so all in-process activities emit
@@ -124,6 +126,21 @@ func main() {
 	jiraActs := jira.NewActivities(jira.NewMockClient(), resolver)
 	w.RegisterActivityWithOptions(jiraActs.CreateTicket, jiraActivityOptions())
 
+	// Channels integration: opt-in via SLACK_BOT_TOKEN.
+	// When enabled, the audit workflow posts each accepted finding to
+	// Slack (or any other registered channel) as a durable activity.
+	channelsEnabled := false
+	if *slackToken != "" && *slackChannel != "" {
+		if err := registerChannels(w, *slackToken, *slackChannel); err != nil {
+			log.Printf("channels integration disabled: %v", err)
+		} else {
+			channelsEnabled = true
+			log.Printf("channels integration enabled: slack channel %s", *slackChannel)
+		}
+	} else {
+		log.Printf("channels integration disabled (set SLACK_BOT_TOKEN and SLACK_CHANNEL to enable)")
+	}
+
 	if err := w.Start(); err != nil {
 		log.Fatalf("worker start: %v", err)
 	}
@@ -132,12 +149,13 @@ func main() {
 
 	// 3. HTTP server.
 	srv := &server{
-		tc:            tc,
-		broker:        broker,
-		taskQueue:     *taskQueue,
-		defaultTarget: *defaultTarget,
-		maxCands:      *maxCands,
-		temporalUI:    strings.TrimRight(*temporalUIURL, "/"),
+		tc:              tc,
+		broker:          broker,
+		taskQueue:       *taskQueue,
+		defaultTarget:   *defaultTarget,
+		maxCands:        *maxCands,
+		temporalUI:      strings.TrimRight(*temporalUIURL, "/"),
+		channelsEnabled: channelsEnabled,
 	}
 	log.Printf("temporal UI: %s", srv.temporalUI)
 
@@ -188,12 +206,13 @@ func main() {
 
 // server holds the deps that handlers need.
 type server struct {
-	tc            client.Client
-	broker        *sibylproxy.MemoryBroker
-	taskQueue     string
-	defaultTarget string
-	maxCands      int
-	temporalUI    string
+	tc              client.Client
+	broker          *sibylproxy.MemoryBroker
+	taskQueue       string
+	defaultTarget   string
+	maxCands        int
+	temporalUI      string
+	channelsEnabled bool
 }
 
 // --- Handlers ---
@@ -307,6 +326,8 @@ func (s *server) handleRun(w http.ResponseWriter, r *http.Request) {
 		FileTickets:             req.FileTickets,
 		MinTicketSeverity:       parseSeverity(req.MinTicketSeverity),
 		MaxCandidatesPerScanner: s.maxCands,
+		PostToChannels:          s.channelsEnabled,
+		ChannelTraceURLBase:     s.temporalUI,
 	}
 
 	_, err := s.tc.ExecuteWorkflow(r.Context(),
