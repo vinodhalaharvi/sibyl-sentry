@@ -206,6 +206,19 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 			}
 			log.Info("waiting for human verdicts",
 				"findings", len(channelPosts), "timeout", timeout.String())
+
+			// Emit "verdicts.started" so the UI shows the awaiting-verdicts
+			// tile in its pulsing-orange state.
+			emitOpts := workflow.ActivityOptions{StartToCloseTimeout: 10 * time.Second}
+			emitCtx := workflow.WithActivityOptions(ctx, emitOpts)
+			_ = workflow.ExecuteActivity(emitCtx, "VerdictEmitActivity", VerdictEmitInput{
+				ParentWorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+				Kind:             "verdicts.started",
+				TotalFindings:    len(channelPosts),
+				TimeoutSeconds:   int(timeout.Seconds()),
+			}).Get(ctx, nil)
+
+			startedAt := workflow.Now(ctx)
 			verdicts = awaitVerdicts(ctx, channelPosts, channels.AwaitOpts{
 				Timeout: timeout,
 				Options: []string{"accept", "reject", "snooze"},
@@ -226,6 +239,18 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 			log.Info("verdict collection complete",
 				"with_verdict", countWithVerdict(verdicts),
 				"timed_out", countTimeouts(verdicts))
+
+			// Emit "verdicts.completed" so the UI tile settles into its
+			// final color (green / amber / gray) based on outcomes.
+			_ = workflow.ExecuteActivity(emitCtx, "VerdictEmitActivity", VerdictEmitInput{
+				ParentWorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+				Kind:             "verdicts.completed",
+				TotalFindings:    len(channelPosts),
+				WithVerdict:      countWithVerdict(verdicts),
+				TimedOut:         countTimeouts(verdicts),
+				Errored:          countErrored(verdicts),
+				DurationMs:       workflow.Now(ctx).Sub(startedAt).Milliseconds(),
+			}).Get(ctx, nil)
 		}
 	}
 

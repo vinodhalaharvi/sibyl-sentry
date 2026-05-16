@@ -94,3 +94,60 @@ func ConvergeEmitActivity(ctx context.Context, in ConvergeEmitInput) error {
 type emitterErr string
 
 func (e emitterErr) Error() string { return string(e) }
+
+// ---------------------------------------------------------------------------
+// Verdict emit — publishes broker events for the "Awaiting Verdicts" tile.
+// ---------------------------------------------------------------------------
+
+// VerdictEmitInput carries the data needed to publish one verdict-tile event.
+//
+// Kind is one of:
+//
+//	"verdicts.started"   — the workflow has begun the wait phase
+//	"verdicts.completed" — the wait phase finished, with counts in Output
+//
+// NodeID for the tile is always "verdicts:summary" (single tile per audit).
+type VerdictEmitInput struct {
+	ParentWorkflowID string
+	Kind             string
+	TotalFindings    int
+	TimeoutSeconds   int   // populated on "verdicts.started"
+	WithVerdict      int   // populated on "verdicts.completed"
+	TimedOut         int   // populated on "verdicts.completed"
+	Errored          int   // populated on "verdicts.completed"
+	DurationMs       int64 // populated on "verdicts.completed"
+}
+
+// VerdictEmitActivity publishes one verdict-tile event to the global broker.
+// Mirrors ConvergeEmitActivity in structure: the activity runs in the worker
+// process where the broker is registered, so SSE subscribers on the parent
+// audit's workflow ID receive the event.
+func VerdictEmitActivity(ctx context.Context, in VerdictEmitInput) error {
+	emitter := sibylproxy.EmitterForActivity(ctx)
+	if emitter == nil {
+		return nil
+	}
+	wid := in.ParentWorkflowID
+	const nodeID = "verdicts:summary"
+
+	switch in.Kind {
+	case "verdicts.started":
+		label := "Awaiting human verdicts"
+		ev := sibylproxy.NewNodeStarted(wid, nodeID, label)
+		emitter.Emit(ev)
+	case "verdicts.completed":
+		label := "Verdict collection complete"
+		output := map[string]interface{}{
+			"total_findings": in.TotalFindings,
+			"with_verdict":   in.WithVerdict,
+			"timed_out":      in.TimedOut,
+			"errored":        in.Errored,
+		}
+		ev := sibylproxy.NewNodeCompleted(wid, nodeID, label,
+			output, time.Duration(in.DurationMs)*time.Millisecond)
+		emitter.Emit(ev)
+	}
+
+	activity.RecordHeartbeat(ctx, "verdict emit done")
+	return nil
+}

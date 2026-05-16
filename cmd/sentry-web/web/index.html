@@ -412,6 +412,43 @@
   .synth-sev.HIGH { fill: var(--accent); }
   .synth-sev.MEDIUM { fill: var(--warn); }
 
+  /* Verdict tile — pulses orange while awaiting human reactions, settles into
+     green/amber/red based on outcome. */
+  .verdict-tile rect { fill: var(--bg-1); stroke-width: 1.5;
+    transition: stroke 0.25s ease, fill 0.25s ease; }
+  .verdict-tile.verdict-awaiting rect { stroke: var(--accent); }
+  .verdict-tile.verdict-complete rect { stroke: var(--ok);     fill: rgba(110,255,138,0.05); }
+  .verdict-tile.verdict-partial  rect { stroke: var(--accent); fill: rgba(255,106,61,0.05); }
+  .verdict-tile.verdict-timeout  rect { stroke: var(--ink-faint); fill: rgba(85,85,78,0.05); }
+  .verdict-tile.verdict-error    rect { stroke: var(--crit);  fill: rgba(255,77,77,0.05); }
+
+  .verdict-pulse { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0;
+    pointer-events: none; }
+  .verdict-tile.verdict-awaiting .verdict-pulse {
+    animation: verdictPulseRing 1.6s ease-out infinite;
+  }
+  @keyframes verdictPulseRing {
+    0%   { stroke-opacity: 0.7; transform: scale(1); transform-box: fill-box; transform-origin: center; }
+    100% { stroke-opacity: 0; transform: scale(1.04); transform-box: fill-box; transform-origin: center; }
+  }
+
+  .verdict-label { font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+    pointer-events: none; }
+  .verdict-tile.verdict-awaiting .verdict-label { fill: var(--accent); }
+  .verdict-tile.verdict-complete .verdict-label { fill: var(--ok); }
+  .verdict-tile.verdict-partial  .verdict-label { fill: var(--accent); }
+  .verdict-tile.verdict-timeout  .verdict-label { fill: var(--ink-faint); }
+  .verdict-tile.verdict-error    .verdict-label { fill: var(--crit); }
+
+  .verdict-sub { fill: var(--ink-faint); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; pointer-events: none; }
+  .verdict-stat-num { font-family: 'Instrument Serif', serif; font-style: italic;
+    font-size: 22px; pointer-events: none; }
+  .verdict-stat-num.verdict-stat-ok    { fill: var(--ok); }
+  .verdict-stat-num.verdict-stat-amber { fill: var(--accent); }
+  .verdict-stat-num.verdict-stat-red   { fill: var(--crit); }
+
   .node-g { cursor: pointer; transition: opacity 0.3s ease; }
   .node-g.idle    { opacity: 0.55; }
   .node-g.running { opacity: 1; }
@@ -507,6 +544,9 @@ function App() {
   const [events, setEvents] = useState([]);
   const [reportFindings, setReportFindings] = useState([]);
   const [reportRejected, setReportRejected] = useState([]);
+  // verdicts: null = wait phase didn't run; { status, total, withVerdict, timedOut, errored, timeoutSeconds }
+  // status: 'awaiting' | 'completed'
+  const [verdicts, setVerdicts] = useState(null);
   const esRef = useRef(null);
 
   function reset() {
@@ -519,6 +559,7 @@ function App() {
     setEvents([]);
     setReportFindings([]);
     setReportRejected([]);
+    setVerdicts(null);
   }
 
   async function runAudit() {
@@ -582,7 +623,14 @@ function App() {
         break;
       case 'node.started': {
         const nid = ev.node_id || '';
-        if (nid.startsWith('converge:')) {
+        if (nid === 'verdicts:summary') {
+          setVerdicts({
+            status: 'awaiting',
+            total: 0, withVerdict: 0, timedOut: 0, errored: 0,
+          });
+          appendEvent({ kind: 'node-started', label: 'verdicts.awaiting',
+            msg: <>awaiting human verdicts in Slack…</>, ts });
+        } else if (nid.startsWith('converge:')) {
           const cid = nid.slice('converge:'.length);
           const wfId = ev.workflow_id || workflowId;
           setCandidates(prev => ({ ...prev, [cid]: {
@@ -600,7 +648,18 @@ function App() {
       }
       case 'node.completed': {
         const nid = ev.node_id || '';
-        if (nid.startsWith('converge:')) {
+        if (nid === 'verdicts:summary') {
+          const out = ev.output || {};
+          setVerdicts({
+            status: 'completed',
+            total: out.total_findings || 0,
+            withVerdict: out.with_verdict || 0,
+            timedOut: out.timed_out || 0,
+            errored: out.errored || 0,
+          });
+          appendEvent({ kind: 'node-completed', label: 'verdicts.complete',
+            msg: <><b>{out.with_verdict || 0}</b> verdicts received · <b>{out.timed_out || 0}</b> timed out</>, ts });
+        } else if (nid.startsWith('converge:')) {
           const cid = nid.slice('converge:'.length);
           const out = ev.output || {};
           setCandidates(prev => ({ ...prev, [cid]: {
@@ -741,6 +800,7 @@ function App() {
             acceptedCount={acceptedCount} rejectedCount={rejectedCount}
             runningCount={runningCount}
             reportFindings={reportFindings} reportRejected={reportRejected}
+            verdicts={verdicts}
             openParent={openParent} openConverge={openConverge} />
         </div>
       </main>
@@ -902,7 +962,7 @@ function FindingCard({ f, rejected, reason, convergeID, openConverge }) {
 
 function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflowId, playState,
                    acceptedCount, rejectedCount, runningCount,
-                   reportFindings, reportRejected,
+                   reportFindings, reportRejected, verdicts,
                    openParent, openConverge }) {
   // Wider canvas so 5 candidates per scanner don't overlap. Each scanner
   // gets its own column (~270px wide), candidates wrap inside that column.
@@ -947,7 +1007,12 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
 
   const maxCandY = candNodes.reduce((m, n) => Math.max(m, n.y), CAND_AREA_TOP);
   const SYNTH_Y = maxCandY + CAND_H + 70;
-  const totalH = SYNTH_Y + 130;
+  // VERDICT_Y is below the synthesis row; only used when verdicts state exists.
+  // When no verdicts state, the tile isn't rendered and totalH stays compact.
+  const VERDICT_TILE_H = 90;
+  const VERDICT_GAP = 24;
+  const VERDICT_Y = SYNTH_Y + 110 + VERDICT_GAP;
+  const totalH = verdicts ? VERDICT_Y + VERDICT_TILE_H + 30 : SYNTH_Y + 130;
 
   // === Severity rollup for the synthesis tile ===
   const sevCounts = useMemo(() => {
@@ -1186,6 +1251,12 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
               </g>
             )}
           </g>
+
+          {/* === Verdicts: Awaiting / Completed tile === */}
+          {verdicts && (
+            <VerdictTile x={W/2 - 200} y={VERDICT_Y} w={400} h={VERDICT_TILE_H}
+                         verdicts={verdicts} onClick={openParent} />
+          )}
         </svg>
         </div>
 
@@ -1197,6 +1268,59 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
           onOpenTemporal={openConverge} />}
       </div>
     </>
+  );
+}
+
+// VerdictTile renders the human-in-the-loop verdict-collection summary.
+// While awaiting, the tile pulses orange. When complete, it settles to:
+//   green   — all findings received a verdict
+//   amber   — some/all findings timed out
+//   red     — errors occurred during the wait
+function VerdictTile({ x, y, w, h, verdicts, onClick }) {
+  const awaiting = verdicts.status === 'awaiting';
+  let stateClass = 'verdict-awaiting';
+  if (!awaiting) {
+    if (verdicts.errored > 0) stateClass = 'verdict-error';
+    else if (verdicts.timedOut > 0 && verdicts.withVerdict === 0) stateClass = 'verdict-timeout';
+    else if (verdicts.timedOut > 0) stateClass = 'verdict-partial';
+    else stateClass = 'verdict-complete';
+  }
+  return (
+    <g className={"node-g verdict-tile " + stateClass}
+       transform={`translate(${x}, ${y})`}
+       onClick={onClick} style={{cursor:'pointer'}}>
+      <rect width={w} height={h} rx={2}/>
+      {awaiting && (
+        <rect className="verdict-pulse" x={-2} y={-2} width={w+4} height={h+4} rx={4}
+              style={{pointerEvents:'none'}}/>
+      )}
+      <text x={w/2} y={24} textAnchor="middle" className="verdict-label">
+        {awaiting ? 'Awaiting Human Verdicts' : 'Verdicts Collected'}
+      </text>
+      {awaiting ? (
+        <text x={w/2} y={52} textAnchor="middle" className="verdict-sub">
+          waiting for security team reactions in Slack…
+        </text>
+      ) : (
+        <g transform={`translate(${w/2}, 52)`}>
+          {[
+            { label: 'received',  n: verdicts.withVerdict, cls: 'verdict-stat-ok' },
+            { label: 'timed out', n: verdicts.timedOut,    cls: 'verdict-stat-amber' },
+            { label: 'errors',    n: verdicts.errored,     cls: 'verdict-stat-red' },
+          ].map((s, i, arr) => {
+            const gap = 110;
+            const totalW = arr.length * gap;
+            const xOff = -totalW/2 + i * gap + gap/2;
+            return (
+              <g key={s.label} transform={`translate(${xOff}, 0)`}>
+                <text x={0} y={0} textAnchor="middle" className={"verdict-stat-num " + s.cls}>{s.n}</text>
+                <text x={0} y={16} textAnchor="middle" className="verdict-sub">{s.label}</text>
+              </g>
+            );
+          })}
+        </g>
+      )}
+    </g>
   );
 }
 

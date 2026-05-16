@@ -125,6 +125,9 @@ func main() {
 	w.RegisterActivityWithOptions(audit.ConvergeEmitActivity, activity.RegisterOptions{
 		Name: "ConvergeEmitActivity",
 	})
+	w.RegisterActivityWithOptions(audit.VerdictEmitActivity, activity.RegisterOptions{
+		Name: "VerdictEmitActivity",
+	})
 	jiraActs := jira.NewActivities(jira.NewMockClient(), resolver)
 	w.RegisterActivityWithOptions(jiraActs.CreateTicket, jiraActivityOptions())
 

@@ -225,6 +225,17 @@ func countTimeouts(vs []VerdictResult) int {
 	return n
 }
 
+// countErrored reports how many results came back with an error string.
+func countErrored(vs []VerdictResult) int {
+	n := 0
+	for _, v := range vs {
+		if v.Error != "" {
+			n++
+		}
+	}
+	return n
+}
+
 // findingToMessage maps Sentry's domain Finding type onto the channel-package
 // neutral Message type. This translation deliberately lives in the audit
 // package (not channels/) so the channels package stays domain-agnostic and

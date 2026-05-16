@@ -112,6 +112,18 @@ func TestCountTimeouts(t *testing.T) {
 	}
 }
 
+func TestCountErrored(t *testing.T) {
+	vs := []VerdictResult{
+		{Error: "boom"},
+		{Choice: "accept"},
+		{Timeout: true},
+		{Error: "rate limited"},
+	}
+	if got := countErrored(vs); got != 2 {
+		t.Errorf("countErrored = %d, want 2", got)
+	}
+}
+
 func TestFindingToMessage_PreservesEssentialFields(t *testing.T) {
 	f := findings.Finding{
 		ID:       "f-42",
