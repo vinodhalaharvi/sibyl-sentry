@@ -75,6 +75,8 @@ func main() {
 	temporalUIURL := flag.String("temporal-ui", "http://localhost:8233", "Temporal Web UI base URL (used for TMP→ deep links in the UI)")
 	slackToken := flag.String("slack-token", os.Getenv("SLACK_BOT_TOKEN"), "Slack bot token (xoxb-...); when set, accepted findings are posted to Slack")
 	slackChannel := flag.String("slack-channel", os.Getenv("SLACK_CHANNEL"), "Slack channel ID (C...) that accepted findings are posted to")
+	waitForVerdicts := flag.Bool("wait-for-verdicts", false, "When true, audits block until each posted finding receives a human verdict (Slack reaction) or VerdictTimeout elapses")
+	verdictTimeout := flag.Duration("verdict-timeout", 30*time.Minute, "How long to wait for a human verdict per finding (parallel across findings)")
 	flag.Parse()
 
 	// 1. Broker registered globally so all in-process activities emit
@@ -136,6 +138,11 @@ func main() {
 		} else {
 			channelsEnabled = true
 			log.Printf("channels integration enabled: slack channel %s", *slackChannel)
+			if *waitForVerdicts {
+				log.Printf("audits will WAIT for human verdicts (timeout: %s per finding, parallel)", *verdictTimeout)
+			} else {
+				log.Printf("audits will post to slack and proceed (no wait); pass -wait-for-verdicts to block on reactions")
+			}
 		}
 	} else {
 		log.Printf("channels integration disabled (set SLACK_BOT_TOKEN and SLACK_CHANNEL to enable)")
@@ -156,6 +163,8 @@ func main() {
 		maxCands:        *maxCands,
 		temporalUI:      strings.TrimRight(*temporalUIURL, "/"),
 		channelsEnabled: channelsEnabled,
+		waitForVerdicts: *waitForVerdicts,
+		verdictTimeout:  *verdictTimeout,
 	}
 	log.Printf("temporal UI: %s", srv.temporalUI)
 
@@ -213,6 +222,8 @@ type server struct {
 	maxCands        int
 	temporalUI      string
 	channelsEnabled bool
+	waitForVerdicts bool
+	verdictTimeout  time.Duration
 }
 
 // --- Handlers ---
@@ -328,6 +339,8 @@ func (s *server) handleRun(w http.ResponseWriter, r *http.Request) {
 		MaxCandidatesPerScanner: s.maxCands,
 		PostToChannels:          s.channelsEnabled,
 		ChannelTraceURLBase:     s.temporalUI,
+		WaitForVerdicts:         s.channelsEnabled && s.waitForVerdicts,
+		VerdictTimeout:          s.verdictTimeout,
 	}
 
 	_, err := s.tc.ExecuteWorkflow(r.Context(),

@@ -158,6 +158,28 @@ type Finding struct {
 	// ConvergeWorkflow that approved this finding. The web UI uses this
 	// to deep-link to the Temporal Web UI's workflow detail page.
 	ConvergeWorkflowID string `json:"converge_workflow_id,omitempty"`
+
+	// --- Human-in-the-loop fields, populated by the channels integration ---
+
+	// HumanVerdict is the choice an authorized human made via a channel
+	// (Slack reaction, email reply, etc.) before the audit finalized.
+	// Possible values match channels.Action.ID: "accept", "reject", "snooze".
+	// Empty string means no verdict was collected — either because human-in-
+	// the-loop wasn't enabled for this audit, or because no one responded
+	// before the timeout.
+	HumanVerdict string `json:"human_verdict,omitempty"`
+
+	// HumanActor identifies who placed the verdict. Format depends on the
+	// IdentityResolver in use: "slack:U0123" by default, "okta:00u..."
+	// when an Okta resolver is wired up.
+	HumanActor string `json:"human_actor,omitempty"`
+
+	// HumanVerdictAt is when the verdict was recorded.
+	HumanVerdictAt time.Time `json:"human_verdict_at,omitempty"`
+
+	// HumanVerdictChannel is which channel produced the verdict ("slack",
+	// "email", etc.). Useful for audits that fan out to multiple channels.
+	HumanVerdictChannel string `json:"human_verdict_channel,omitempty"`
 }
 
 // RejectedFinding records a candidate that the Critic refused to accept.

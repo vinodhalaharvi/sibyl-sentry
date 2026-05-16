@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/vinodhalaharvi/sibyl-sentry/channels"
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
 	"github.com/vinodhalaharvi/sibyl-sentry/internal/sibylproxy"
 	"github.com/vinodhalaharvi/sibyl-sentry/jira"
@@ -97,6 +98,18 @@ type AuditInput struct {
 	// deep-links in posted messages. Typical value: "http://localhost:8233".
 	// Optional; if empty, posted messages will not include a trace link.
 	ChannelTraceURLBase string
+
+	// WaitForVerdicts, when true, blocks the workflow after posting findings
+	// to channels until each finding receives a human verdict (Slack reaction,
+	// etc.) OR the per-finding timeout elapses. Verdicts are attached to
+	// findings before the audit completes. Requires PostToChannels=true.
+	// Default false: post and proceed, no waiting.
+	WaitForVerdicts bool
+
+	// VerdictTimeout is how long to wait for a human verdict per finding.
+	// All waits run in parallel, so total wait is bounded by this duration
+	// not by N×duration. Defaults to 30 minutes if zero.
+	VerdictTimeout time.Duration
 }
 
 // VendorEndpoints groups per-vendor connection config.
@@ -124,6 +137,7 @@ type AuditOutput struct {
 	Report       findings.Report
 	Tickets      []TicketResult
 	ChannelPosts []PostFindingsResult
+	Verdicts     []VerdictResult
 }
 
 // TicketResult records the outcome of each ticket-creation attempt.
@@ -181,8 +195,27 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 	}
 
 	var channelPosts []PostFindingsResult
+	var verdicts []VerdictResult
 	if in.PostToChannels && len(report.Findings) > 0 {
 		channelPosts = postFindings(ctx, report.Findings, in.ChannelTraceURLBase)
+
+		if in.WaitForVerdicts {
+			timeout := in.VerdictTimeout
+			if timeout <= 0 {
+				timeout = 30 * time.Minute
+			}
+			log.Info("waiting for human verdicts",
+				"findings", len(channelPosts), "timeout", timeout.String())
+			verdicts = awaitVerdicts(ctx, channelPosts, channels.AwaitOpts{
+				Timeout: timeout,
+				Options: []string{"accept", "reject", "snooze"},
+			})
+			// Attach verdicts to findings so the report reflects them.
+			report.Findings = applyVerdicts(report.Findings, verdicts)
+			log.Info("verdict collection complete",
+				"with_verdict", countWithVerdict(verdicts),
+				"timed_out", countTimeouts(verdicts))
+		}
 	}
 
 	log.Info("audit complete",
@@ -190,8 +223,14 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 		"findings_rejected", len(report.Rejected),
 		"errors", len(report.Errors),
 		"tickets", len(tickets),
-		"channel_posts", len(channelPosts))
-	return &AuditOutput{Report: report, Tickets: tickets, ChannelPosts: channelPosts}, nil
+		"channel_posts", len(channelPosts),
+		"verdicts", len(verdicts))
+	return &AuditOutput{
+		Report:       report,
+		Tickets:      tickets,
+		ChannelPosts: channelPosts,
+		Verdicts:     verdicts,
+	}, nil
 }
 
 // runScanners is Phase 1: schedule every enabled scanner in parallel,
