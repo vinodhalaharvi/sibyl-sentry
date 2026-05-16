@@ -212,6 +212,17 @@ func SecurityAuditWorkflow(ctx workflow.Context, in AuditInput) (*AuditOutput, e
 			})
 			// Attach verdicts to findings so the report reflects them.
 			report.Findings = applyVerdicts(report.Findings, verdicts)
+			// Log per-verdict outcome so silent errors are visible.
+			for _, v := range verdicts {
+				switch {
+				case v.Choice != "":
+					log.Info("verdict received", "finding", v.FindingID, "choice", v.Choice, "actor", v.Actor)
+				case v.Timeout:
+					log.Info("verdict timed out", "finding", v.FindingID)
+				case v.Error != "":
+					log.Warn("verdict error", "finding", v.FindingID, "error", v.Error)
+				}
+			}
 			log.Info("verdict collection complete",
 				"with_verdict", countWithVerdict(verdicts),
 				"timed_out", countTimeouts(verdicts))
