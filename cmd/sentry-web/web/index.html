@@ -246,7 +246,8 @@
     position: fixed; z-index: 100;
     background: var(--bg-1); border: 1px solid var(--accent);
     box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,106,61,0.1);
-    padding: 16px 18px; min-width: 380px; max-width: 520px;
+    padding: 16px 18px; min-width: 380px; max-width: 560px;
+    max-height: calc(100vh - 80px); overflow-y: auto;
     font-size: 11px; line-height: 1.55;
     animation: popoverIn 0.2s ease-out;
   }
@@ -276,17 +277,43 @@
     letter-spacing: 0.15em; text-transform: uppercase;
     display: block; margin-bottom: 3px;
   }
-  .notes-popover .pop-value { color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; }
+  .notes-popover .pop-value {
+    display: block; color: var(--ink-dim);
+    white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+  }
   .notes-popover .pop-value.rationale {
-    background: var(--bg); padding: 8px 10px;
+    background: var(--bg); padding: 10px 12px;
     border-left: 2px solid var(--sibyl);
     color: var(--ink);
+    max-height: 280px; overflow-y: auto;
+    margin-top: 2px;
   }
   .notes-popover .pop-value.error {
-    background: var(--bg); padding: 8px 10px;
+    background: var(--bg); padding: 10px 12px;
     border-left: 2px solid var(--crit);
     color: var(--ink-dim);
+    max-height: 240px; overflow-y: auto;
+    margin-top: 2px;
   }
+  .notes-popover .pop-value.json {
+    display: block; font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; line-height: 1.5;
+    background: var(--bg); padding: 10px 12px;
+    border-left: 2px solid var(--running);
+    color: var(--ink-dim);
+    max-height: 240px; overflow: auto;
+    white-space: pre; word-break: normal;
+    margin-top: 2px;
+  }
+  .notes-popover details summary {
+    cursor: pointer; user-select: none;
+    transition: color 0.15s ease;
+  }
+  .notes-popover details summary:hover { color: var(--running) !important; }
+  .notes-popover details[open] summary { color: var(--running) !important; }
+  .notes-popover details[open] summary::before { content: '▾ '; }
+  .notes-popover details:not([open]) summary::before { content: '▸ '; }
+  .notes-popover details summary::-webkit-details-marker { display: none; }
   .notes-popover .pop-value.sev-CRITICAL { color: var(--crit); font-weight: 700; }
   .notes-popover .pop-value.sev-HIGH     { color: var(--accent); font-weight: 700; }
   .notes-popover .pop-value.sev-MEDIUM   { color: var(--warn); font-weight: 700; }
@@ -1106,9 +1133,37 @@ function ConvergeNode({ c, w, h, onOpenTemporal, onOpenNotes }) {
 }
 
 // NotesPopover surfaces the structured fields of a converge result so the
-// user doesn't have to read Temporal's raw JSON dumps.
+// user doesn't have to read Temporal's raw JSON dumps. Symmetric view:
+// both accepted AND rejected candidates show the same fields, so it's
+// easy to compare. Accepted gets Critic rationale; rejected gets reason.
 function NotesPopover({ popover, onClose, onOpenTemporal }) {
   const c = popover.cand;
+  // Build a "raw output" view that mirrors what the workflow emitted in
+  // node.completed/node.failed — useful for verification.
+  const rawOutput = {
+    candidate_id: c.id,
+    label: c.label,
+    status: c.status,
+    severity: c.severity,
+    rounds: c.rounds,
+    converge_workflow_id: c.convergeWorkflowID,
+    accepted: c.status === 'accepted',
+    description: c.description,
+    rationale: c.rationale,
+    rejection_reason: c.reason,
+  };
+  // Strip null/empty/undefined keys for a cleaner JSON view.
+  const cleanedOutput = Object.fromEntries(
+    Object.entries(rawOutput).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+  );
+  const prettyJson = JSON.stringify(cleanedOutput, null, 2);
+
+  const statusLabel =
+    c.status === 'accepted' && c.severity ? `${c.severity} · accepted` :
+    c.status === 'rejected' ? 'rejected by Critic' :
+    c.status === 'running' ? 'researcher/critic in progress' :
+    c.status;
+
   return (
     <>
       <div style={{position:'fixed', inset:0, zIndex:99}} onClick={onClose}/>
@@ -1120,39 +1175,52 @@ function NotesPopover({ popover, onClose, onOpenTemporal }) {
 
         <div className="pop-field">
           <span className="pop-label">candidate id</span>
-          <span className="pop-value">{c.id}</span>
+          <div className="pop-value">{c.id}</div>
         </div>
 
         <div className="pop-field">
           <span className="pop-label">status</span>
-          <span className={"pop-value " + (c.severity ? "sev-"+c.severity : "")}>
-            {c.status === 'accepted' && c.severity ? `${c.severity} · accepted` :
-             c.status === 'rejected' ? 'rejected by Critic' :
-             c.status === 'running' ? 'researcher/critic in progress' : c.status}
+          <div className={"pop-value " + (c.severity ? "sev-"+c.severity : "")}>
+            {statusLabel}
             {c.rounds > 0 && ` · ${c.rounds} round${c.rounds > 1 ? 's' : ''}`}
-          </span>
+          </div>
         </div>
 
         {c.description && (
           <div className="pop-field">
             <span className="pop-label">description</span>
-            <span className="pop-value">{c.description}</span>
+            <div className="pop-value">{c.description}</div>
           </div>
         )}
 
-        {c.rationale && c.status === 'accepted' && (
+        {/* Critic rationale (accepted) OR rejection reason (rejected).
+            Same visual weight & shape so the popover layout is consistent
+            across both outcomes. */}
+        {c.status === 'accepted' && c.rationale && (
           <div className="pop-field">
-            <span className="pop-label">critic rationale</span>
-            <span className="pop-value rationale">{c.rationale}</span>
+            <span className="pop-label">critic rationale (accepted)</span>
+            <div className="pop-value rationale">{c.rationale}</div>
+          </div>
+        )}
+        {c.status === 'rejected' && c.reason && (
+          <div className="pop-field">
+            <span className="pop-label">critic reason (rejected)</span>
+            <div className="pop-value error">{c.reason}</div>
           </div>
         )}
 
-        {c.reason && c.status === 'rejected' && (
-          <div className="pop-field">
-            <span className="pop-label">rejection reason</span>
-            <span className="pop-value error">{c.reason}</span>
-          </div>
-        )}
+        {/* Raw event output — what the workflow's node.completed/node.failed
+            actually carried. Useful for verification; collapsible. */}
+        <details className="pop-field" style={{cursor:'pointer'}}>
+          <summary style={{
+            color:'var(--ink-faint)', fontSize:'9px',
+            letterSpacing:'0.15em', textTransform:'uppercase',
+            marginBottom:'4px', outline:'none',
+          }}>
+            raw event payload (JSON)
+          </summary>
+          <div className="pop-value json">{prettyJson}</div>
+        </details>
 
         <div className="pop-foot">
           {c.convergeWorkflowID && (
