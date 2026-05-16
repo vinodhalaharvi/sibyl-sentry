@@ -1,0 +1,37 @@
+# Environment files — never commit secrets or per-developer config.
+# Use .env.example for documenting required variables.
+.env
+.env.*
+!.env.example
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+
+# Coverage and profiling
+*.prof
+coverage.txt
+coverage.html
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+logs/
