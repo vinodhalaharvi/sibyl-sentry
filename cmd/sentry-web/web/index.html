@@ -335,6 +335,64 @@
   }
   .notes-popover .pop-tmp:hover { background: var(--running); color: var(--bg); }
 
+  /* Synthesis popover — wider than notes popover, holds a list of findings */
+  .notes-popover.synth-popover {
+    min-width: 600px; max-width: 720px;
+  }
+  .synth-list { display: flex; flex-direction: column; gap: 10px; }
+  .synth-row {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--bg);
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  .synth-row.severity-CRITICAL { border-left-color: var(--crit); }
+  .synth-row.severity-HIGH     { border-left-color: var(--accent); }
+  .synth-row.severity-MEDIUM   { border-left-color: var(--warn); }
+  .synth-row.rejected { border-left-color: var(--ink-faint); opacity: 0.85; }
+  .synth-row-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; margin-bottom: 6px;
+  }
+  .synth-row-title {
+    color: var(--ink); font-weight: 500; flex: 1; line-height: 1.4;
+    word-break: break-word;
+  }
+  .synth-row-desc {
+    color: var(--ink-dim); margin-bottom: 6px; line-height: 1.55;
+    max-height: 100px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .synth-row-rationale { margin-bottom: 8px; }
+  .synth-row-rationale .rationale-label {
+    margin-bottom: 4px; display: block;
+  }
+  .synth-text {
+    background: var(--bg-1);
+    padding: 8px 10px;
+    border-left: 2px solid var(--sibyl);
+    color: var(--ink);
+    line-height: 1.55;
+    max-height: 180px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .synth-text.rejected {
+    border-left-color: var(--ink-faint);
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+  .synth-row-foot {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    gap: 12px;
+  }
+  .synth-row-meta {
+    display: flex; gap: 12px; font-size: 10px; color: var(--ink-faint);
+  }
+  .synth-row-meta b { color: var(--ink-dim); }
+
   /* Synthesis summary card — replaces the bland "Synthesized Report" tile */
   .synth-card {
     fill: var(--bg-1); stroke: var(--ok); stroke-width: 1.5;
@@ -682,6 +740,7 @@ function App() {
             workflowId={workflowId} playState={playState}
             acceptedCount={acceptedCount} rejectedCount={rejectedCount}
             runningCount={runningCount}
+            reportFindings={reportFindings} reportRejected={reportRejected}
             openParent={openParent} openConverge={openConverge} />
         </div>
       </main>
@@ -842,7 +901,9 @@ function FindingCard({ f, rejected, reason, convergeID, openConverge }) {
 }
 
 function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflowId, playState,
-                   acceptedCount, rejectedCount, runningCount, openParent, openConverge }) {
+                   acceptedCount, rejectedCount, runningCount,
+                   reportFindings, reportRejected,
+                   openParent, openConverge }) {
   // Wider canvas so 5 candidates per scanner don't overlap. Each scanner
   // gets its own column (~270px wide), candidates wrap inside that column.
   const W = 1320;
@@ -939,12 +1000,29 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
   };
   const closeNotes = () => setPopover(null);
 
+  // === Synthesis popover state — shows the full accepted/rejected list ===
+  const [synthPopover, setSynthPopover] = useState(null); // { kind: 'accepted'|'rejected', x, y }
+  const openSynth = (e, kind) => {
+    e.stopPropagation();
+    const rect = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 100, top: 100 };
+    // Synthesis popover is wider; clamp into viewport.
+    const x = Math.min(rect.left, window.innerWidth - 680);
+    const y = Math.min(rect.bottom + 8, window.innerHeight - 480);
+    setSynthPopover({ kind, x: Math.max(20, x), y: Math.max(20, y) });
+  };
+  const closeSynth = () => setSynthPopover(null);
+
   useEffect(() => {
-    if (!popover) return;
-    const onKey = (e) => { if (e.key === 'Escape') closeNotes(); };
+    if (!popover && !synthPopover) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (popover) closeNotes();
+        if (synthPopover) closeSynth();
+      }
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [popover]);
+  }, [popover, synthPopover]);
 
   const phase1Status = useMemo(() => {
     const vals = Object.values(scanner);
@@ -1084,7 +1162,9 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
           {/* === Synthesis: Accepted report — structured summary === */}
           <SynthesisTile x={W/2 - 260} y={SYNTH_Y} w={260} h={110}
                          accepted={acceptedCount} sevCounts={sevCounts}
-                         onClick={openParent} />
+                         onClick={openParent}
+                         onOpenNotes={(e) => openSynth(e, 'accepted')}
+                         hasNotes={acceptedCount > 0} />
 
           {/* === Synthesis: Rejected log === */}
           <g transform={`translate(${W/2 + 10}, ${SYNTH_Y})`}
@@ -1096,11 +1176,25 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
             <text x={130} y={60} textAnchor="middle" className="synth-num" style={{fill:'var(--ink-faint)'}}>{rejectedCount}</text>
             <text x={130} y={82} textAnchor="middle" className="synth-sub">rejected with rationale</text>
             <text x={130} y={98} textAnchor="middle" className="synth-sub" style={{fontStyle:'italic'}}>audit trail kept</text>
+            {/* ⓘ notes icon — only when there's something to show */}
+            {rejectedCount > 0 && (
+              <g onClick={(e) => { e.stopPropagation(); openSynth(e, 'rejected'); }} style={{cursor:'pointer'}}>
+                <circle cx={260 - 14} cy={14} r={9} className="node-notes-bg"/>
+                <text x={260 - 14} y={18} textAnchor="middle" className="node-notes"
+                      style={{fontSize:'11px', fontWeight:'700', pointerEvents:'none', userSelect:'none'}}>i</text>
+                <rect x={260 - 28} y={0} width={28} height={28} fill="transparent"/>
+              </g>
+            )}
           </g>
         </svg>
         </div>
 
         {popover && <NotesPopover popover={popover} onClose={closeNotes} onOpenTemporal={openConverge} />}
+        {synthPopover && <SynthesisPopover
+          popover={synthPopover} onClose={closeSynth}
+          findings={synthPopover.kind === 'accepted' ? reportFindings : reportRejected}
+          kind={synthPopover.kind}
+          onOpenTemporal={openConverge} />}
       </div>
     </>
   );
@@ -1108,8 +1202,8 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
 
 // SynthesisTile renders the accepted findings summary with severity breakdown.
 // Replaces the previous bare "X accepted" tile with something the user can
-// actually read.
-function SynthesisTile({ x, y, w, h, accepted, sevCounts, onClick }) {
+// actually read. Click body → Temporal parent; click ⓘ → full findings popover.
+function SynthesisTile({ x, y, w, h, accepted, sevCounts, onClick, onOpenNotes, hasNotes }) {
   const empty = accepted === 0;
   return (
     <g className="node-g" transform={`translate(${x}, ${y})`} onClick={onClick} style={{cursor:'pointer'}}>
@@ -1132,6 +1226,15 @@ function SynthesisTile({ x, y, w, h, accepted, sevCounts, onClick }) {
         </g>
       )}
       {empty && <text x={w/2} y={88} textAnchor="middle" className="synth-sub" style={{fontStyle:'italic'}}>no findings yet</text>}
+      {/* ⓘ icon to drill into the full findings list */}
+      {hasNotes && (
+        <g onClick={(e) => { e.stopPropagation(); onOpenNotes(e); }} style={{cursor:'pointer'}}>
+          <circle cx={w - 14} cy={14} r={9} className="node-notes-bg"/>
+          <text x={w - 14} y={18} textAnchor="middle" className="node-notes"
+                style={{fontSize:'11px', fontWeight:'700', pointerEvents:'none', userSelect:'none'}}>i</text>
+          <rect x={w - 28} y={0} width={28} height={28} fill="transparent"/>
+        </g>
+      )}
     </g>
   );
 }
@@ -1272,6 +1375,90 @@ function NotesPopover({ popover, onClose, onOpenTemporal }) {
             </a>
           )}
         </div>
+      </div>
+    </>
+  );
+}
+
+// SynthesisPopover renders the full list of accepted (or rejected) findings
+// in a single overlay. Reached by clicking the ⓘ on the synthesis tile.
+// Each row shows title, severity, and rationale; click TMP→ to land on
+// that finding's converge workflow in Temporal.
+function SynthesisPopover({ popover, onClose, findings, kind, onOpenTemporal }) {
+  const isRejected = kind === 'rejected';
+  const heading = isRejected
+    ? `Rejected by Critic (${findings.length})`
+    : `Accepted Findings (${findings.length})`;
+
+  // Pull fields with snake_case + PascalCase fallbacks, mirroring FindingCard.
+  function fieldsFor(item) {
+    const f = isRejected ? (item.candidate || item.Candidate || item) : item;
+    return {
+      id:        f.id || f.ID || '',
+      title:     f.title || f.Title || '(no title)',
+      desc:      f.description || f.Description || '',
+      sev:       f.severity || f.Severity || 'INFO',
+      rationale: f.llm_rationale || f.LLMRationale || '',
+      scanner:   f.scanner_id || f.ScannerID || '',
+      rounds:    f.converge_rounds || f.ConvergeRounds || 0,
+      cwfid:     (isRejected
+                    ? (item.converge_workflow_id || item.ConvergeWorkflowID)
+                    : (f.converge_workflow_id || f.ConvergeWorkflowID)) || '',
+      reason:    isRejected ? (item.reason || item.Reason || '') : '',
+    };
+  }
+
+  return (
+    <>
+      <div style={{position:'fixed', inset:0, zIndex:99}} onClick={onClose}/>
+      <div className="notes-popover synth-popover"
+           style={{left: popover.x, top: popover.y}}>
+        <div className="pop-head">
+          <span className="pop-title">{heading}</span>
+          <button className="pop-close" onClick={onClose}>×</button>
+        </div>
+
+        {findings.length === 0 ? (
+          <div className="pop-field">
+            <div className="pop-value" style={{fontStyle:'italic', color:'var(--ink-faint)'}}>
+              {isRejected ? 'No rejections.' : 'No findings yet.'}
+            </div>
+          </div>
+        ) : (
+          <div className="synth-list">
+            {findings.map((item, i) => {
+              const f = fieldsFor(item);
+              return (
+                <div key={f.id || i} className={"synth-row " + (isRejected ? 'rejected ' : '') + 'severity-' + f.sev}>
+                  <div className="synth-row-head">
+                    <span className="synth-row-title">{f.title}</span>
+                    <span className={"f-sev " + f.sev}>{isRejected ? 'REJECTED' : f.sev}</span>
+                  </div>
+                  {f.desc && <div className="synth-row-desc">{f.desc}</div>}
+                  <div className="synth-row-rationale">
+                    <span className="rationale-label">
+                      {isRejected ? 'Critic rejection:' : 'Critic rationale:'}
+                    </span>
+                    <div className={isRejected ? 'synth-text rejected' : 'synth-text'}>
+                      {isRejected ? (f.reason || '(no reason)') : (f.rationale || '(no rationale)')}
+                    </div>
+                  </div>
+                  <div className="synth-row-foot">
+                    <span className="synth-row-meta">
+                      {f.scanner && <span><b>scanner:</b> {f.scanner}</span>}
+                      {f.rounds > 0 && <span><b>rounds:</b> {f.rounds}</span>}
+                    </span>
+                    {f.cwfid && (
+                      <a className="pop-tmp" onClick={() => onOpenTemporal(f.cwfid)}>
+                        Open in Temporal →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
