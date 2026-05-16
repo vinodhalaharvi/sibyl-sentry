@@ -3,7 +3,10 @@
 // the synthesizer ranks and groups them; the Jira agent files them.
 package findings
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Severity is the urgency of a finding. Higher value = more urgent.
 type Severity int
@@ -29,6 +32,41 @@ func (s Severity) String() string {
 	default:
 		return "INFO"
 	}
+}
+
+// MarshalJSON serializes severity as its uppercase string label rather than
+// the underlying int. The UI matches on these strings to color-code findings;
+// emitting "4" would break the rendering with a className like "f-sev 4".
+func (s Severity) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + s.String() + `"`), nil
+}
+
+// UnmarshalJSON accepts either the string label ("CRITICAL", "HIGH", ...)
+// or the legacy integer form, so old persisted data still loads.
+func (s *Severity) UnmarshalJSON(data []byte) error {
+	// Try int first for backward compat.
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*s = Severity(n)
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	switch str {
+	case "CRITICAL":
+		*s = SeverityCritical
+	case "HIGH":
+		*s = SeverityHigh
+	case "MEDIUM":
+		*s = SeverityMedium
+	case "LOW":
+		*s = SeverityLow
+	default:
+		*s = SeverityInfo
+	}
+	return nil
 }
 
 // Category groups findings by the kind of issue. Used for routing,
