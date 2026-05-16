@@ -402,15 +402,17 @@ func runConvergence(ctx workflow.Context, candidates []findings.Finding) ([]find
 			final.ConvergeWorkflowID = k.childWfID
 			accepted = append(accepted, final)
 			_ = workflow.ExecuteActivity(emitCtx, "ConvergeEmitActivity", ConvergeEmitInput{
-				ParentWorkflowID: parentID,
-				Kind:             "node.completed",
-				CandidateID:      k.candidate.ID,
-				CandidateTitle:   k.candidate.Title,
-				ChildWorkflowID:  k.childWfID,
-				Severity:         result.Severity.String(),
-				Rounds:           answer.Rounds,
-				Accepted:         true,
-				DurationMs:       durMs,
+				ParentWorkflowID:     parentID,
+				Kind:                 "node.completed",
+				CandidateID:          k.candidate.ID,
+				CandidateTitle:       k.candidate.Title,
+				CandidateDescription: final.Description,
+				ChildWorkflowID:      k.childWfID,
+				Severity:             result.Severity.String(),
+				Rounds:               answer.Rounds,
+				Accepted:             true,
+				Rationale:            result.Rationale,
+				DurationMs:           durMs,
 			}).Get(ctx, nil)
 		} else {
 			reason := result.Rationale

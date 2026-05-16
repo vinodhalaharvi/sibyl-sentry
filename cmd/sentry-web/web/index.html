@@ -80,7 +80,9 @@
   .side-title { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--ink-faint); margin-bottom: 14px; }
   .scanner-card { border: 1px solid var(--line); margin-bottom: 12px;
-    background: var(--bg-1); transition: border-color 0.3s ease; }
+    background: var(--bg-1); transition: border-color 0.3s ease, transform 0.15s ease; }
+  .scanner-card.clickable { cursor: pointer; }
+  .scanner-card.clickable:hover { border-color: var(--accent); transform: translateY(-1px); }
   .scanner-card.running { border-color: var(--sibyl); }
   .scanner-card.completed { border-color: var(--ok); }
   .scanner-card.failed { border-color: var(--crit); }
@@ -204,7 +206,121 @@
     background:
       linear-gradient(to right, rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 40px 40px,
       linear-gradient(to bottom, rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 40px 40px; }
-  .dag-canvas svg { display: block; width: 100%; min-width: 1180px; }
+  /* Zoom wrapper sits inside the scroll container. Its dimensions
+     drive the scrollable area; transform scales the SVG inside it
+     without affecting the scrollbar logic. */
+  .dag-zoom-wrap { transform-origin: 0 0; will-change: transform;
+    /* width/height set inline via React from natural canvas dims × scale */ }
+  .dag-canvas svg { display: block; }
+
+  .dag-zoom-ctrl {
+    display: flex; gap: 4px; align-items: center;
+    margin-left: 18px; padding-left: 18px; border-left: 1px solid var(--line);
+  }
+  .dag-zoom-ctrl button {
+    background: var(--bg); border: 1px solid var(--line-strong);
+    color: var(--ink-dim); width: 26px; height: 26px;
+    font-family: inherit; font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .dag-zoom-ctrl button:hover { color: var(--accent); border-color: var(--accent); }
+  .dag-zoom-ctrl .zoom-pct {
+    color: var(--ink-faint); font-size: 10px; min-width: 38px; text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Notes icon on each converge node */
+  .node-notes {
+    fill: var(--ink-faint); cursor: pointer;
+    transition: fill 0.2s ease;
+  }
+  .node-notes:hover { fill: var(--sibyl); }
+  .node-notes-bg {
+    fill: var(--bg); stroke: var(--line-strong); stroke-width: 1;
+    cursor: pointer;
+  }
+  .node-notes-bg:hover { stroke: var(--sibyl); }
+
+  /* Popover for notes — fixed-position overlay */
+  .notes-popover {
+    position: fixed; z-index: 100;
+    background: var(--bg-1); border: 1px solid var(--accent);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,106,61,0.1);
+    padding: 16px 18px; min-width: 380px; max-width: 520px;
+    font-size: 11px; line-height: 1.55;
+    animation: popoverIn 0.2s ease-out;
+  }
+  @keyframes popoverIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .notes-popover .pop-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .notes-popover .pop-title {
+    font-size: 11px; color: var(--ink); font-weight: 500;
+    flex: 1; margin-right: 12px; word-break: break-word;
+  }
+  .notes-popover .pop-close {
+    background: transparent; border: none; color: var(--ink-faint);
+    font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .notes-popover .pop-close:hover { color: var(--ink); }
+  .notes-popover .pop-field {
+    margin-bottom: 8px;
+  }
+  .notes-popover .pop-label {
+    color: var(--ink-faint); font-size: 9px;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    display: block; margin-bottom: 3px;
+  }
+  .notes-popover .pop-value { color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; }
+  .notes-popover .pop-value.rationale {
+    background: var(--bg); padding: 8px 10px;
+    border-left: 2px solid var(--sibyl);
+    color: var(--ink);
+  }
+  .notes-popover .pop-value.error {
+    background: var(--bg); padding: 8px 10px;
+    border-left: 2px solid var(--crit);
+    color: var(--ink-dim);
+  }
+  .notes-popover .pop-value.sev-CRITICAL { color: var(--crit); font-weight: 700; }
+  .notes-popover .pop-value.sev-HIGH     { color: var(--accent); font-weight: 700; }
+  .notes-popover .pop-value.sev-MEDIUM   { color: var(--warn); font-weight: 700; }
+  .notes-popover .pop-foot {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: flex-end;
+  }
+  .notes-popover .pop-tmp {
+    color: var(--running); border: 1px solid var(--running);
+    padding: 4px 10px; font-size: 9px; font-weight: 700;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    text-decoration: none; cursor: pointer;
+  }
+  .notes-popover .pop-tmp:hover { background: var(--running); color: var(--bg); }
+
+  /* Synthesis summary card — replaces the bland "Synthesized Report" tile */
+  .synth-card {
+    fill: var(--bg-1); stroke: var(--ok); stroke-width: 1.5;
+    cursor: pointer; transition: stroke 0.25s ease;
+  }
+  .synth-card:hover { filter: brightness(1.3); }
+  .synth-empty { stroke: var(--line-strong); }
+  .synth-label { fill: var(--ok); font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; pointer-events: none; }
+  .synth-num { fill: var(--accent); font-family: 'Instrument Serif', serif;
+    font-style: italic; font-size: 24px; pointer-events: none; }
+  .synth-sub { fill: var(--ink-faint); font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; pointer-events: none; }
+  .synth-sev { font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em; pointer-events: none; }
+  .synth-sev.CRITICAL { fill: var(--crit); }
+  .synth-sev.HIGH { fill: var(--accent); }
+  .synth-sev.MEDIUM { fill: var(--warn); }
 
   .node-g { cursor: pointer; transition: opacity 0.3s ease; }
   .node-g.idle    { opacity: 0.55; }
@@ -377,8 +493,10 @@ function App() {
         const nid = ev.node_id || '';
         if (nid.startsWith('converge:')) {
           const cid = nid.slice('converge:'.length);
+          const wfId = ev.workflow_id || workflowId;
           setCandidates(prev => ({ ...prev, [cid]: {
             status: 'running', label: ev.label || cid, severity: null, rounds: 0,
+            convergeWorkflowID: childWorkflowID(wfId, cid),
           }}));
           appendEvent({ kind: 'node-started', label: 'converge.start',
             msg: <><span className="mono">{cid}</span> running researcher/critic</>, ts });
@@ -398,6 +516,8 @@ function App() {
             status: 'accepted', label: ev.label || cid,
             severity: out.severity || null, rounds: out.rounds || 0,
             convergeWorkflowID: out.converge_workflow_id || '',
+            rationale: out.rationale || '',
+            description: out.description || '',
           }}));
           appendEvent({ kind: 'node-completed', label: 'converge.accept',
             msg: <><span className="mono">{cid}</span> accepted, severity <b>{out.severity}</b> · {out.rounds} round{(out.rounds||1)>1?'s':''}</>, ts });
@@ -415,8 +535,11 @@ function App() {
         const nid = ev.node_id || '';
         if (nid.startsWith('converge:')) {
           const cid = nid.slice('converge:'.length);
+          const wfId = ev.workflow_id || workflowId;
           setCandidates(prev => ({ ...prev, [cid]: {
             status: 'rejected', label: ev.label || cid, severity: null, rounds: 0,
+            reason: ev.error || '',
+            convergeWorkflowID: (prev[cid] && prev[cid].convergeWorkflowID) || childWorkflowID(wfId, cid),
           }}));
           appendEvent({ kind: 'node-failed', label: 'converge.reject',
             msg: <><span className="mono">{cid}</span> rejected: {(ev.error||'').slice(0,60)}</>, ts });
@@ -521,6 +644,15 @@ function labelFor(scannerId) {
   return s ? s.label : scannerId;
 }
 
+// Compose the deterministic child workflow ID from parent + candidate.
+// Mirrors the Go side's childWorkflowID() — must stay in sync.
+function childWorkflowID(parentWfID, candidateID) {
+  if (!parentWfID || !candidateID) return '';
+  const short = parentWfID.replace(/^sentry-audit-/, '');
+  const safeCand = candidateID.length > 60 ? candidateID.slice(0, 60) : candidateID;
+  return `converge-${short}-${safeCand}`;
+}
+
 function ListView({ scanner, scannerOut, events, workflowId, playState, findings, rejected, openParent, openConverge }) {
   const bannerStatus = playState === 'running' ? 'running' : playState === 'done' ? 'completed' : 'idle';
   const bannerLabel = playState === 'running' ? 'running...' : playState === 'done' ? 'completed' : 'idle';
@@ -528,12 +660,16 @@ function ListView({ scanner, scannerOut, events, workflowId, playState, findings
   return (
     <>
       <aside className="scanners">
-        <div className="side-title">Scanners</div>
+        <div className="side-title">Scanners <span style={{color:'var(--ink-faint)', fontStyle:'italic'}}>(click to open in Temporal)</span></div>
         {SCANNERS.map(s => {
           const status = scanner[s.id] || 'idle';
           const out = scannerOut[s.id];
+          const clickable = !!workflowId;
           return (
-            <div key={s.id} className={"scanner-card " + status}>
+            <div key={s.id}
+                 className={"scanner-card " + status + (clickable ? " clickable" : "")}
+                 onClick={clickable ? openParent : undefined}
+                 title={clickable ? "Open audit workflow in Temporal" : undefined}>
               <div className="scanner-head">
                 <span className="scanner-name">{s.label}</span>
                 <span className="scanner-status">{status}</span>
@@ -641,24 +777,38 @@ function FindingCard({ f, rejected, reason, convergeID, openConverge }) {
 
 function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflowId, playState,
                    acceptedCount, rejectedCount, runningCount, openParent, openConverge }) {
-  const W = 1180;
-  const SCANNER_W = 200, SCANNER_H = 60;
-  const CAND_W = 90, CAND_H = 60, CAND_GAP_X = 8, CAND_GAP_Y = 8;
-  const CANDS_PER_ROW = 10;
+  // Wider canvas so 5 candidates per scanner don't overlap. Each scanner
+  // gets its own column (~270px wide), candidates wrap inside that column.
+  const W = 1320;
+  const SCANNER_W = 240, SCANNER_H = 60;
+  const CAND_W = 116, CAND_H = 70, CAND_GAP_X = 8, CAND_GAP_Y = 10;
+  const CANDS_PER_ROW = 2;   // 2 candidates wide → up to 3 rows for 5 candidates
   const SCANNER_Y = 130;
-  const CAND_AREA_TOP = 220;
+  const CAND_AREA_TOP = 230;
 
-  const scannerXs = { secrets: 60, oauth: 320, scopes: 620, dormancy: 920 };
+  // Each scanner column is SCANNER_W wide plus a gutter, evenly distributed.
+  const COL_W = (W - 80) / 4;  // 4 scanner columns
+  const scannerXs = {
+    secrets:  40 + 0 * COL_W,
+    oauth:    40 + 1 * COL_W,
+    scopes:   40 + 2 * COL_W,
+    dormancy: 40 + 3 * COL_W,
+  };
 
+  // Layout candidates inside each scanner's column.
   function candidateLayout(parent) {
-    const startX = scannerXs[parent];
+    const colLeft = scannerXs[parent];
+    const colCenter = colLeft + SCANNER_W / 2;
+    // Center the candidate grid horizontally inside the column.
+    const gridWidth = CANDS_PER_ROW * CAND_W + (CANDS_PER_ROW - 1) * CAND_GAP_X;
+    const gridStartX = colCenter - gridWidth / 2;
     const cands = candidatesByParent[parent] || [];
     return cands.map((c, idx) => {
       const row = Math.floor(idx / CANDS_PER_ROW);
       const col = idx % CANDS_PER_ROW;
       return {
         ...c, parent,
-        x: startX + col * (CAND_W + CAND_GAP_X),
+        x: gridStartX + col * (CAND_W + CAND_GAP_X),
         y: CAND_AREA_TOP + row * (CAND_H + CAND_GAP_Y),
       };
     });
@@ -669,8 +819,66 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
   }, [candidates]);
 
   const maxCandY = candNodes.reduce((m, n) => Math.max(m, n.y), CAND_AREA_TOP);
-  const SYNTH_Y = maxCandY + CAND_H + 60;
-  const totalH = SYNTH_Y + 80;
+  const SYNTH_Y = maxCandY + CAND_H + 70;
+  const totalH = SYNTH_Y + 130;
+
+  // === Severity rollup for the synthesis tile ===
+  const sevCounts = useMemo(() => {
+    const out = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    Object.values(candidates).forEach(c => {
+      if (c.status === 'accepted' && c.severity && out[c.severity] !== undefined) {
+        out[c.severity]++;
+      }
+    });
+    return out;
+  }, [candidates]);
+
+  // === Zoom & pan ===
+  const [zoom, setZoom] = useState(1);
+  const MIN_ZOOM = 0.4, MAX_ZOOM = 2.5;
+  const canvasRef = useRef(null);
+  const setZoomClamped = (z) => setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z)));
+
+  // Cmd/Ctrl + scroll wheel zooms; we capture the wheel event when modifier
+  // is held and translate to zoom-in/out. Plain wheel scrolls the canvas
+  // normally (handled by the browser via overflow:auto).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        const dir = e.deltaY < 0 ? 1 : -1;
+        setZoomClamped(zoom + dir * 0.1);
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom]);
+
+  const onDoubleClick = (e) => {
+    if (e.target.closest('.node-g, .node-notes, .node-notes-bg, .notes-popover')) return;
+    setZoom(1);
+  };
+
+  // === Notes popover state ===
+  const [popover, setPopover] = useState(null); // { cand, x, y } or null
+  const openNotes = (e, c) => {
+    e.stopPropagation();
+    // Anchor below the click point, with viewport-edge protection
+    const rect = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : { left: 100, top: 100 };
+    const x = Math.min(rect.left, window.innerWidth - 540);
+    const y = Math.min(rect.bottom + 8, window.innerHeight - 320);
+    setPopover({ cand: c, x: Math.max(20, x), y: Math.max(20, y) });
+  };
+  const closeNotes = () => setPopover(null);
+
+  useEffect(() => {
+    if (!popover) return;
+    const onKey = (e) => { if (e.key === 'Escape') closeNotes(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [popover]);
 
   const phase1Status = useMemo(() => {
     const vals = Object.values(scanner);
@@ -678,13 +886,11 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
     if (vals.every(v => v === 'completed' || v === 'failed')) return 'completed';
     return 'active';
   }, [scanner]);
-
   const phase2Status = useMemo(() => {
     if (Object.keys(candidates).length === 0) return 'idle';
     if (runningCount > 0) return 'active';
     return 'completed';
   }, [candidates, runningCount]);
-
   const phase3Status = playState === 'done' ? 'completed' : 'idle';
 
   function edgeForScanner(sid) {
@@ -711,27 +917,40 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
           <div className="stat"><span className={"v " + (rejectedCount>0 ? 'crit' : '')}>{rejectedCount}</span><b>rejected</b></div>
           {runningCount > 0 && <div className="stat"><span className="v" style={{color:'var(--sibyl)'}}>{runningCount}</span><b>running</b></div>}
         </div>
-        <div className="dag-legend">
-          <span className="swatch"><span className="dot idle"></span> idle</span>
-          <span className="swatch"><span className="dot running"></span> running</span>
-          <span className="swatch"><span className="dot completed"></span> done</span>
-          <span className="swatch"><span className="dot rejected"></span> rejected</span>
+        <div style={{display:'flex', alignItems:'center'}}>
+          <div className="dag-legend">
+            <span className="swatch"><span className="dot idle"></span> idle</span>
+            <span className="swatch"><span className="dot running"></span> running</span>
+            <span className="swatch"><span className="dot completed"></span> done</span>
+            <span className="swatch"><span className="dot rejected"></span> rejected</span>
+          </div>
+          <div className="dag-zoom-ctrl" title="Cmd/Ctrl + scroll to zoom · double-click to reset">
+            <button onClick={() => setZoomClamped(zoom - 0.15)} title="Zoom out">−</button>
+            <span className="zoom-pct">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoomClamped(zoom + 0.15)} title="Zoom in">+</button>
+            <button onClick={() => setZoom(1)} title="Reset zoom" style={{fontSize: '10px'}}>↺</button>
+          </div>
         </div>
       </div>
 
-      <div className="dag-canvas">
-        <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg">
+      <div ref={canvasRef} className="dag-canvas" onDoubleClick={onDoubleClick}>
+        <div className="dag-zoom-wrap" style={{
+          width: W * zoom, height: totalH * zoom,
+          transform: `scale(${zoom})`,
+        }}>
+        <svg width={W} height={totalH} viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg">
           <text x={40} y={32} className={"phase-label " + phase1Status}>Phase 1 — Scanner Fan-Out</text>
           <line x1={20} y1={SCANNER_Y + SCANNER_H + 20} x2={W-20} y2={SCANNER_Y + SCANNER_H + 20} className="phase-line"/>
           <text x={40} y={SCANNER_Y + SCANNER_H + 40} className={"phase-label " + phase2Status}>Phase 2 — Convergence (Researcher / Critic per candidate)</text>
           <line x1={20} y1={SYNTH_Y - 25} x2={W-20} y2={SYNTH_Y - 25} className="phase-line"/>
           <text x={40} y={SYNTH_Y - 8} className={"phase-label " + phase3Status}>Phase 3 — Synthesis</text>
 
-          <Node x={(W - 280) / 2} y={20} w={280} h={70} cls={"root " + (playState === 'running' ? 'running' : playState === 'done' ? 'completed' : 'idle')}
+          <Node x={(W - 320) / 2} y={20} w={320} h={70}
+                cls={"root " + (playState === 'running' ? 'running' : playState === 'done' ? 'completed' : 'idle')}
                 onClick={openParent}>
-            <text x={140} y={26} textAnchor="middle" className="label">SecurityAuditWorkflow</text>
-            <text x={140} y={44} textAnchor="middle" className="sub">{workflowId || '—'}</text>
-            <text x={140} y={60} textAnchor="middle" className="badge">PARENT WORKFLOW</text>
+            <text x={160} y={26} textAnchor="middle" className="label">SecurityAuditWorkflow</text>
+            <text x={160} y={44} textAnchor="middle" className="sub">{workflowId || '—'}</text>
+            <text x={160} y={60} textAnchor="middle" className="badge">CLICK → TEMPORAL</text>
           </Node>
 
           {SCANNERS.map(s => {
@@ -747,7 +966,7 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
             const status = scanner[s.id] || 'idle';
             const out = scannerOut[s.id] || {};
             const subText = status === 'completed' && out.findings_count !== undefined
-              ? `${out.findings_count} candidate${out.findings_count !== 1 ? 's' : ''}`
+              ? `${out.findings_count} candidate${out.findings_count !== 1 ? 's' : ''} found`
               : status === 'running' ? 'fetching...' : s.sub;
             return (
               <Node key={s.id} x={scannerXs[s.id]} y={SCANNER_Y} w={SCANNER_W} h={SCANNER_H}
@@ -773,18 +992,9 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
           })}
 
           {candNodes.map(c => (
-            <Node key={c.id} x={c.x} y={c.y} w={CAND_W} h={CAND_H}
-                  cls={"converge " + c.status} onClick={() => openConverge(c.convergeWorkflowID)}>
-              <text x={CAND_W/2} y={18} textAnchor="middle" className="label" style={{fontSize: '9px'}}>
-                {c.id.length > 14 ? c.id.slice(0,12)+'..' : c.id}
-              </text>
-              {c.severity && <text x={CAND_W/2} y={34} textAnchor="middle" className={"sev " + c.severity}>{c.severity}</text>}
-              <text x={CAND_W/2} y={50} textAnchor="middle" className="badge" style={{fontSize: '8px'}}>
-                {c.status === 'accepted' ? `ACCEPTED · ${c.rounds}R`
-                  : c.status === 'rejected' ? `REJECTED`
-                  : c.status === 'running' ? 'RUNNING' : 'PENDING'}
-              </text>
-            </Node>
+            <ConvergeNode key={c.id} c={c} w={CAND_W} h={CAND_H}
+              onOpenTemporal={() => openConverge(c.convergeWorkflowID)}
+              onOpenNotes={(e) => openNotes(e, c)} />
           ))}
 
           {candNodes.length === 0 && (
@@ -797,7 +1007,7 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
             if (c.status === 'idle' || c.status === 'running') return null;
             const fromX = c.x + CAND_W / 2;
             const fromY = c.y + CAND_H;
-            const toX = c.status === 'accepted' ? (W/2 - 100) : (W/2 + 100);
+            const toX = c.status === 'accepted' ? (W/2 - 130) : (W/2 + 130);
             return (
               <path key={"e-synth-"+c.id}
                 d={`M ${fromX} ${fromY} L ${fromX} ${SYNTH_Y - 30} L ${toX} ${SYNTH_Y - 30} L ${toX} ${SYNTH_Y}`}
@@ -805,27 +1015,152 @@ function DagView({ scanner, scannerOut, candidates, candidatesByParent, workflow
             );
           })}
 
-          <Node x={W/2 - 220} y={SYNTH_Y} w={200} h={60}
-                cls={"root " + (acceptedCount > 0 ? 'completed' : 'idle')}
-                onClick={openParent}>
-            <text x={100} y={22} textAnchor="middle" className="label">Synthesized Report</text>
-            <text x={100} y={40} textAnchor="middle" className="sub" style={{fill: 'var(--ok)'}}>
-              {acceptedCount} accepted
-            </text>
-            <text x={100} y={54} textAnchor="middle" className="badge">PARENT WORKFLOW</text>
-          </Node>
+          {/* === Synthesis: Accepted report — structured summary === */}
+          <SynthesisTile x={W/2 - 260} y={SYNTH_Y} w={260} h={110}
+                         accepted={acceptedCount} sevCounts={sevCounts}
+                         onClick={openParent} />
 
-          <g transform={`translate(${W/2 + 20}, ${SYNTH_Y})`}>
-            <rect width={200} height={60} rx={2}
+          {/* === Synthesis: Rejected log === */}
+          <g transform={`translate(${W/2 + 10}, ${SYNTH_Y})`}
+             className="node-g" onClick={openParent} style={{cursor:'pointer'}}>
+            <rect width={260} height={110} rx={2}
               fill="var(--bg-1)" stroke="var(--ink-faint)" strokeWidth={1} strokeDasharray="2,2"
               style={{opacity: rejectedCount > 0 ? 1 : 0.4}}/>
-            <text x={100} y={22} textAnchor="middle" className="label" style={{fill: 'var(--ink-faint)'}}>Rejected log</text>
-            <text x={100} y={40} textAnchor="middle" className="sub" style={{fill: 'var(--ink-faint)'}}>
-              {rejectedCount} rejection{rejectedCount !== 1 ? 's' : ''}
-            </text>
-            <text x={100} y={54} textAnchor="middle" className="badge" style={{fill: 'var(--ink-faint)'}}>AUDIT TRAIL</text>
+            <text x={130} y={26} textAnchor="middle" className="synth-label" style={{fill:'var(--ink-faint)'}}>Rejected by Critic</text>
+            <text x={130} y={60} textAnchor="middle" className="synth-num" style={{fill:'var(--ink-faint)'}}>{rejectedCount}</text>
+            <text x={130} y={82} textAnchor="middle" className="synth-sub">rejected with rationale</text>
+            <text x={130} y={98} textAnchor="middle" className="synth-sub" style={{fontStyle:'italic'}}>audit trail kept</text>
           </g>
         </svg>
+        </div>
+
+        {popover && <NotesPopover popover={popover} onClose={closeNotes} onOpenTemporal={openConverge} />}
+      </div>
+    </>
+  );
+}
+
+// SynthesisTile renders the accepted findings summary with severity breakdown.
+// Replaces the previous bare "X accepted" tile with something the user can
+// actually read.
+function SynthesisTile({ x, y, w, h, accepted, sevCounts, onClick }) {
+  const empty = accepted === 0;
+  return (
+    <g className="node-g" transform={`translate(${x}, ${y})`} onClick={onClick} style={{cursor:'pointer'}}>
+      <rect width={w} height={h} rx={2} className={"synth-card " + (empty ? 'synth-empty' : '')}/>
+      <text x={w/2} y={22} textAnchor="middle" className="synth-label">Accepted Findings</text>
+      <text x={w/2} y={56} textAnchor="middle" className="synth-num">{accepted}</text>
+      {!empty && (
+        <g transform={`translate(${w/2}, 78)`}>
+          {Object.entries(sevCounts).filter(([_, n]) => n > 0).map(([sev, n], i, arr) => {
+            const gap = 70;
+            const totalW = arr.length * gap;
+            const xOff = -totalW/2 + i * gap + gap/2;
+            return (
+              <g key={sev} transform={`translate(${xOff}, 0)`}>
+                <text x={0} y={0} textAnchor="middle" className={"synth-sev " + sev}>{sev}</text>
+                <text x={0} y={16} textAnchor="middle" className="synth-sub">{n}</text>
+              </g>
+            );
+          })}
+        </g>
+      )}
+      {empty && <text x={w/2} y={88} textAnchor="middle" className="synth-sub" style={{fontStyle:'italic'}}>no findings yet</text>}
+    </g>
+  );
+}
+
+// ConvergeNode is a candidate tile with a notes-icon affordance.
+// Click body → Temporal; click ℹ icon → notes popover with rationale/error.
+function ConvergeNode({ c, w, h, onOpenTemporal, onOpenNotes }) {
+  const status = c.status;
+  const hasNotes = !!(c.rationale || c.reason || status === 'accepted' || status === 'rejected');
+  return (
+    <g className={"node-g converge " + status} transform={`translate(${c.x}, ${c.y})`}>
+      <rect width={w} height={h} rx={2} onClick={onOpenTemporal} style={{cursor:'pointer'}}/>
+      <rect className="node-pulse" x={-2} y={-2} width={w+4} height={h+4} rx={4}/>
+      <text x={w/2} y={18} textAnchor="middle" className="label" style={{fontSize:'10px', pointerEvents:'none'}}>
+        {c.id.length > 18 ? c.id.slice(0,16)+'..' : c.id}
+      </text>
+      {c.severity && (
+        <text x={w/2} y={36} textAnchor="middle" className={"sev " + c.severity}
+              style={{pointerEvents:'none'}}>{c.severity}</text>
+      )}
+      <text x={w/2} y={54} textAnchor="middle" className="badge" style={{fontSize:'8px', pointerEvents:'none'}}>
+        {status === 'accepted' ? `ACCEPTED · ${c.rounds}R`
+          : status === 'rejected' ? `REJECTED · ${c.rounds||1}R`
+          : status === 'running' ? 'RUNNING' : 'PENDING'}
+      </text>
+      {hasNotes && (
+        <>
+          <circle cx={w - 11} cy={11} r={8} className="node-notes-bg" onClick={onOpenNotes}/>
+          <text x={w - 11} y={14.5} textAnchor="middle" className="node-notes"
+                style={{fontSize:'10px', fontWeight:'700', pointerEvents:'none', userSelect:'none'}}>i</text>
+          {/* Larger transparent hit target above the visible icon for easier click */}
+          <rect x={w - 22} y={0} width={22} height={22}
+                fill="transparent" style={{cursor:'pointer'}} onClick={onOpenNotes}/>
+        </>
+      )}
+    </g>
+  );
+}
+
+// NotesPopover surfaces the structured fields of a converge result so the
+// user doesn't have to read Temporal's raw JSON dumps.
+function NotesPopover({ popover, onClose, onOpenTemporal }) {
+  const c = popover.cand;
+  return (
+    <>
+      <div style={{position:'fixed', inset:0, zIndex:99}} onClick={onClose}/>
+      <div className="notes-popover" style={{left: popover.x, top: popover.y}}>
+        <div className="pop-head">
+          <span className="pop-title">{c.label || c.id}</span>
+          <button className="pop-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="pop-field">
+          <span className="pop-label">candidate id</span>
+          <span className="pop-value">{c.id}</span>
+        </div>
+
+        <div className="pop-field">
+          <span className="pop-label">status</span>
+          <span className={"pop-value " + (c.severity ? "sev-"+c.severity : "")}>
+            {c.status === 'accepted' && c.severity ? `${c.severity} · accepted` :
+             c.status === 'rejected' ? 'rejected by Critic' :
+             c.status === 'running' ? 'researcher/critic in progress' : c.status}
+            {c.rounds > 0 && ` · ${c.rounds} round${c.rounds > 1 ? 's' : ''}`}
+          </span>
+        </div>
+
+        {c.description && (
+          <div className="pop-field">
+            <span className="pop-label">description</span>
+            <span className="pop-value">{c.description}</span>
+          </div>
+        )}
+
+        {c.rationale && c.status === 'accepted' && (
+          <div className="pop-field">
+            <span className="pop-label">critic rationale</span>
+            <span className="pop-value rationale">{c.rationale}</span>
+          </div>
+        )}
+
+        {c.reason && c.status === 'rejected' && (
+          <div className="pop-field">
+            <span className="pop-label">rejection reason</span>
+            <span className="pop-value error">{c.reason}</span>
+          </div>
+        )}
+
+        <div className="pop-foot">
+          {c.convergeWorkflowID && (
+            <a className="pop-tmp" onClick={() => onOpenTemporal(c.convergeWorkflowID)}>
+              Open in Temporal →
+            </a>
+          )}
+        </div>
       </div>
     </>
   );

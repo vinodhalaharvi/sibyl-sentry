@@ -26,16 +26,18 @@ import (
 //   "node.completed" — a child completed (accepted by Critic)
 //   "node.failed"    — a child failed or was rejected by Critic
 type ConvergeEmitInput struct {
-	ParentWorkflowID  string
-	Kind              string
-	CandidateID       string
-	CandidateTitle    string
-	ChildWorkflowID   string
-	Severity          string
-	Rounds            int
-	Accepted          bool
-	Reason            string
-	DurationMs        int64
+	ParentWorkflowID     string
+	Kind                 string
+	CandidateID          string
+	CandidateTitle       string
+	CandidateDescription string
+	ChildWorkflowID      string
+	Severity             string
+	Rounds               int
+	Accepted             bool
+	Reason               string
+	Rationale            string
+	DurationMs           int64
 }
 
 // ConvergeEmitActivity publishes one event to the global broker.
@@ -66,6 +68,8 @@ func ConvergeEmitActivity(ctx context.Context, in ConvergeEmitInput) error {
 			"severity":             in.Severity,
 			"rounds":               in.Rounds,
 			"accepted":             in.Accepted,
+			"rationale":            in.Rationale,
+			"description":          in.CandidateDescription,
 		}
 		ev := sibylproxy.NewNodeCompleted(wid, "converge:"+in.CandidateID, label,
 			output, time.Duration(in.DurationMs)*time.Millisecond)
