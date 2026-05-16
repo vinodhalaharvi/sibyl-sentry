@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 
+<script src="/config.js"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -282,7 +283,11 @@ const SCANNERS = [
   { id: 'dormancy', label: 'Dormant SAs',    sub: 'aws /iam/users' },
 ];
 
-const TEMPORAL_BASE = 'http://localhost:8080/namespaces/default/workflows/';
+// TEMPORAL_BASE is set by /config.js at page load. Fallback covers
+// the case where /config.js failed to load (e.g. when opening
+// index.html directly without sentry-web running).
+const TEMPORAL_BASE = (window.SENTRY_CONFIG && window.SENTRY_CONFIG.temporal_ui_base)
+  || 'http://localhost:8233/namespaces/default/workflows/';
 
 function App() {
   const [tab, setTab] = useState('dag');

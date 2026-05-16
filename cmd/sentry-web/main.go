@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -71,6 +72,7 @@ func main() {
 	llmBackend := flag.String("llm", "scripted", "LLM backend for Researcher/Critic: scripted | anthropic | claude-code")
 	llmModel := flag.String("model", "", "LLM model name (empty = backend's default)")
 	maxCands := flag.Int("max-candidates", 5, "Max candidates per scanner sent to convergence (0 = unlimited; bound LLM fan-out)")
+	temporalUIURL := flag.String("temporal-ui", "http://localhost:8233", "Temporal Web UI base URL (used for TMP→ deep links in the UI)")
 	flag.Parse()
 
 	// 1. Broker registered globally so all in-process activities emit
@@ -135,10 +137,13 @@ func main() {
 		taskQueue:     *taskQueue,
 		defaultTarget: *defaultTarget,
 		maxCands:      *maxCands,
+		temporalUI:    strings.TrimRight(*temporalUIURL, "/"),
 	}
+	log.Printf("temporal UI: %s", srv.temporalUI)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handleIndex)
+	mux.HandleFunc("/config.js", srv.handleConfig)
 	mux.HandleFunc("/run", srv.handleRun)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/report", srv.handleReport)
@@ -188,6 +193,7 @@ type server struct {
 	taskQueue     string
 	defaultTarget string
 	maxCands      int
+	temporalUI    string
 }
 
 // --- Handlers ---
@@ -211,6 +217,23 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(data)
+}
+
+// handleConfig serves a tiny JS file that the index page loads early.
+// It sets window.SENTRY_CONFIG with runtime values the UI needs — most
+// importantly the Temporal Web UI base URL, since that varies by
+// Temporal version (8080 on older builds, 8233 on Temporal CLI 1.7+).
+//
+// Keeping this server-injected means we don't have to recompile or
+// patch the embedded HTML when Temporal picks a different port.
+func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := map[string]string{
+		"temporal_ui_base": s.temporalUI + "/namespaces/default/workflows/",
+	}
+	body, _ := json.Marshal(cfg)
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = fmt.Fprintf(w, "window.SENTRY_CONFIG = %s;\n", body)
 }
 
 // runRequest is the POST /run payload. All vendor URLs default to the
