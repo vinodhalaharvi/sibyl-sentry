@@ -5,9 +5,7 @@ go 1.24.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hillu/go-yara/v4 v4.3.4
-	github.com/slack-go/slack v0.13.0
-	github.com/stretchr/testify v1.11.1
-	github.com/vinodhalaharvi/sibyl v0.1.1-0.20260514135358-1be2194c3f16
+	github.com/vinodhalaharvi/sibyl v0.1.1-0.20260517194258-7f0f717da908
 	go.temporal.io/sdk v1.43.0
 )
 
@@ -33,7 +31,9 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
+	github.com/slack-go/slack v0.13.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/vinodhalaharvi/weft v0.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.39.0 // indirect

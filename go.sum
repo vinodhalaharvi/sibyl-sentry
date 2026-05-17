@@ -67,8 +67,8 @@ github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/vinodhalaharvi/sibyl v0.1.1-0.20260514135358-1be2194c3f16 h1:lVhXz9GKgl8YEM9lxmDeQ/eWPRjZxeccRJ8VE71AD0o=
-github.com/vinodhalaharvi/sibyl v0.1.1-0.20260514135358-1be2194c3f16/go.mod h1:M/3BAw1VmufGH0LQ6AErtFb1N2MUYgaRkrNLziUi+sY=
+github.com/vinodhalaharvi/sibyl v0.1.1-0.20260517194258-7f0f717da908 h1:9yGCqZwINzpWYMbq10jvRlrem+rv2KMX8bPQSTTal7M=
+github.com/vinodhalaharvi/sibyl v0.1.1-0.20260517194258-7f0f717da908/go.mod h1:/VB255IgabKNzFqb6YE7Y7hpjSkpq0JReHB+xBCyZd4=
 github.com/vinodhalaharvi/weft v0.1.0 h1:9Q6/qa2NsVVbPqloFNyHttl6yK3pMXIhpZ5tozUF7Mc=
 github.com/vinodhalaharvi/weft v0.1.0/go.mod h1:7agbWEieCB8Idgt+fbRz4sFGtrbklchM72Gy3C78OVw=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=

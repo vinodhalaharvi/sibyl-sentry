@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/vinodhalaharvi/sibyl-sentry/channels"
+	"github.com/vinodhalaharvi/sibyl/channels"
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
 	"github.com/vinodhalaharvi/sibyl-sentry/internal/sibylproxy"
 	"github.com/vinodhalaharvi/sibyl-sentry/jira"

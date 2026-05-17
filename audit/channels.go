@@ -8,8 +8,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/vinodhalaharvi/sibyl-sentry/channels"
-	chtemporal "github.com/vinodhalaharvi/sibyl-sentry/channels/temporal"
+	"github.com/vinodhalaharvi/sibyl/channels"
+	chtemporal "github.com/vinodhalaharvi/sibyl/channels/temporal"
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
 )
 

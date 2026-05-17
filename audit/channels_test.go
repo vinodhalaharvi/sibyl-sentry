@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vinodhalaharvi/sibyl-sentry/channels"
+	"github.com/vinodhalaharvi/sibyl/channels"
 	"github.com/vinodhalaharvi/sibyl-sentry/findings"
 )
 

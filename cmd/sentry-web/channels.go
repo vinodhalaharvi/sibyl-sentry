@@ -5,9 +5,9 @@ import (
 
 	"go.temporal.io/sdk/worker"
 
-	"github.com/vinodhalaharvi/sibyl-sentry/channels"
-	"github.com/vinodhalaharvi/sibyl-sentry/channels/slack"
-	chtemporal "github.com/vinodhalaharvi/sibyl-sentry/channels/temporal"
+	"github.com/vinodhalaharvi/sibyl/channels"
+	"github.com/vinodhalaharvi/sibyl/channels/slack"
+	chtemporal "github.com/vinodhalaharvi/sibyl/channels/temporal"
 )
 
 // registerChannels constructs the dispatcher and registers the
